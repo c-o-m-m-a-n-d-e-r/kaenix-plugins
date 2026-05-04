@@ -1,6 +1,6 @@
 /**
  * @plugin    Push
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.org
