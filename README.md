@@ -78,7 +78,7 @@ Felder, die der Nutzer pro Node-Instanz konfigurieren kann:
 
 ```js
 config: [
-  { key: 'zeitSekunden', label: 'Zeit in Sekunden', type: 'number', placeholder: '60' },
+  { key: 'zeitSekunden', label: 'Zeit in Sekunden', type: 'number', default: 60, placeholder: '60' },
   { key: 'modus',        label: 'Modus', type: 'select',
     options: [
       { value: 'auto',    label: 'Automatisch' },
@@ -91,6 +91,26 @@ config: [
 ```
 
 Verfügbare `type`-Werte: `text`, `number`, `password`, `select`, `checkbox`.
+
+Das optionale Feld `default` setzt den Startwert wenn eine neue Node-Instanz angelegt wird.
+
+### `dynamicOutputs(data)` _(optional)_
+
+Statt eines statischen `outputs`-Arrays kann eine Funktion definiert werden, die die Ausgänge
+dynamisch aus den aktuellen Konfigurationswerten berechnet. Die Node im Logic-Editor
+aktualisiert ihre Handles in Echtzeit wenn der Nutzer die Konfiguration ändert.
+
+```js
+dynamicOutputs(data) {
+  const n = Math.max(1, parseInt(data?.count ?? 4, 10));
+  return Array.from({ length: n }, (_, i) => ({
+    handle: `out${i + 1}`,
+    label:  `Ausgang ${i + 1}`,
+  }));
+},
+```
+
+> `dynamicOutputs` ersetzt `outputs`. Wird `dynamicOutputs` definiert, wird `outputs` ignoriert.
 
 ### `globalSettings`
 Einstellungen, die einmalig pro Plugin-Typ gelten (z.B. API-Keys).  
@@ -274,4 +294,28 @@ module.exports = {
 | `type`           | kebab-case, eindeutig             | `mein-plugin`                   |
 | `handle`-Namen   | lowercase, keine Leerzeichen      | `trigger`, `restzeit`           |
 | `config`-Keys    | camelCase                         | `zeitSekunden`, `apiToken`      |
+
+---
+
+## Mitgelieferte Plugins
+
+| Plugin | Typ | Kategorie | Beschreibung |
+|--------|-----|-----------|------------------|
+| **Scaler** | `scaler` | Mathematik | Skaliert einen Wert: `(in × Faktor) + Offset` |
+| **Hysterese** | `hysteresis` | Logik | Zweipunktregelung mit Totband (Unter-/Obergrenze) |
+| **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
+| **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
+| **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
+| **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
+
+### Lauflicht – Konfiguration
+
+| Parameter | Typ | Default | Beschreibung |
+|-----------|-----|---------|------------------|
+| `outputs` | number | 4 | Anzahl Ausgänge (beliebig viele, dynamisch) |
+| `delay` | number | 200 | Verzögerung zwischen Ausgängen in ms |
+| `direction` | select | `forward` | Richtung beim Einschalten: `forward` (1→N) oder `backward` (N→1) |
+| `reverseOnOff` | select | `0` | Beim Ausschalten Richtung umkehren: `0` = nein, `1` = ja |
+
+Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`dynamicOutputs`).
 

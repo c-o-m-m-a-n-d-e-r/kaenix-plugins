@@ -3,7 +3,7 @@
  * @version   1.0.0
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
- * @website   https://www.kaenix.org
+ * @website   https://www.kaenix.net
  */
 
 /**

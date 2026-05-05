@@ -3,7 +3,7 @@
  * @version   1.0.1
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
- * @website   https://www.kaenix.org
+ * @website   https://www.kaenix.net
  */
 module.exports = {
   type: 'push',
