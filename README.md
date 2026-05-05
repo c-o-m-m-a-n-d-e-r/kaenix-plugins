@@ -305,6 +305,7 @@ module.exports = {
 | **Hysterese** | `hysteresis` | Logik | Zweipunktregelung mit Totband (Unter-/Obergrenze) |
 | **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
 | **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
+| **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 
@@ -318,4 +319,21 @@ module.exports = {
 | `reverseOnOff` | select | `0` | Beim Ausschalten Richtung umkehren: `0` = nein, `1` = ja |
 
 Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`dynamicOutputs`).
+
+### Heizstab – Konfiguration
+
+| Parameter | Typ | Default | Beschreibung |
+|-----------|-----|---------|---------------------|
+| `minTemp` | number | 0 | Unterhalb dieser Temperatur wird sofort geheizt |
+| `maxTemp` | number | 60 | Oberhalb von `maxTemp + 0,2 °C` wird abgeschaltet |
+| `phasen` | select | `3` | Anzahl nutzbarer Phasen (1–3) |
+| `phasePower` | number | 2000 | Leistung pro Phase in Watt |
+| `warten` | select | `0` | Bei fehlendem Überschuss: `0` = alternativ heizen, `1` = warten |
+| `batterieLimit` | number | 20 | Ab diesem Batterieladezustand (%) wird Boost aktiviert wenn kein PV-Überschuss |
+| `ueberschuss` | number | 0 | Überschussregel: Temp-Abweichung von maxTemp ab der PV-Heizung einsetzt (0 = aus) |
+| `beobachtung` | number | 30 | Watchdog-Zeit in Sekunden: nach Ablauf wird abgeschaltet wenn Überschuss < 1 W |
+| `aktiv` | select | `1` | Steuerung aktiv (`1`) oder inaktiv (`0`) |
+
+**Eingänge:** 15 KNX-Eingänge (alle optional, überschreiben die Node-Konfiguration).  
+**Ausgänge:** `L1`, `L2`, `L3` (Phasen), `Alternativ heizen`, `Leistung (%)`, `Debug`.
 
