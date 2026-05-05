@@ -1,6 +1,6 @@
 # kaenix Plugins
 
-Plugins erweitern den **Logic Editor** von kaenix.io um eigene Node-Typen.  
+Plugins erweitern den **Logic Editor** von kaenix um eigene Node-Typen.  
 Jedes Plugin ist eine einzelne JavaScript-Datei und wird beim Start automatisch geladen.
 
 ---
