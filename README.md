@@ -305,9 +305,47 @@ module.exports = {
 | **Hysterese** | `hysteresis` | Logik | Zweipunktregelung mit Totband (Unter-/Obergrenze) |
 | **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
 | **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
+| **BWM** | `bwm` | Automatisierung | Bewegungsmelder mit Helligkeitsschwelle, Nachlaufzeit und Grundbeleuchtung |
 | **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
+
+### BWM – Konfiguration
+
+| Parameter | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `schwelleDefault` | number | 100 | Helligkeitsschwelle – nur unter diesem Wert wird eingeschaltet |
+| `nachlaufzeitDefault` | number | 1 | Nachlaufzeit in Minuten |
+| `freigabeDefault` | number | 1 | Freigabe beim Start (1 = aktiv, 0 = gesperrt) |
+| `grundDefault` | number | 0 | Grundbeleuchtung nach Ablauf (1 = ja, 0 = nein) |
+
+**Eingänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `trigger` | Bewegungsmelder-Impuls (1 = Bewegung erkannt) |
+| `helligkeit` | Aktueller Helligkeitswert |
+| `schwelle` | Helligkeitsschwelle (überschreibt Konfiguration) |
+| `nachlaufzeit` | Nachlaufzeit in Minuten (überschreibt Konfiguration) |
+| `freigabe` | Freigabe (1 = aktiv, 0 = gesperrt) |
+| `grundbeleuchtung` | Grundbeleuchtung nach Ablauf aktivieren (1 = ja) |
+
+**Ausgänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `an_aus` | Schalt-Telegramm (1 = ein, 0 = aus) |
+| `an` | Impuls beim Einschalten |
+| `aus` | Impuls beim Ausschalten |
+| `grund` | Grundbeleuchtung aktiv (Impuls) |
+| `aktiv` | Nachlauf läuft gerade (1 / 0) |
+| `restzeit` | Verbleibende Nachlaufzeit in Sekunden |
+
+**Verhalten:** Trigger + Freigabe aktiv + Helligkeit ≤ Schwelle → Licht ein, Nachlauftimer startet.  
+Kommt während des Nachlaufs ein erneuter Trigger, wird der Timer zurückgesetzt (verlängert).  
+Nach Ablauf: wenn Grundbeleuchtung aktiv und Helligkeit < Schwelle → `grund`-Ausgang, sonst `aus`.
+
+---
 
 ### Lauflicht – Konfiguration
 
