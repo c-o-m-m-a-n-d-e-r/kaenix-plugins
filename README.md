@@ -309,6 +309,7 @@ module.exports = {
 | **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
+| **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 
 ### BWM – Konfiguration
 
@@ -374,4 +375,84 @@ Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`d
 
 **Eingänge:** 15 KNX-Eingänge (alle optional, überschreiben die Node-Konfiguration).  
 **Ausgänge:** `L1`, `L2`, `L3` (Phasen), `Alternativ heizen`, `Leistung (%)`, `Debug`.
+
+---
+
+### Shelly – Konfiguration
+
+Unterstützt Shelly-Geräte **Gen 1** (REST-API) und **Gen 2 / 3 / 4** (RPC-API mit Digest-Auth SHA-256).  
+Die Gerätegeneraion wird beim ersten Verbindungsaufbau automatisch per `GET /shelly` erkannt.
+
+| Parameter | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `ip` | text | – | IP-Adresse des Shelly |
+| `port` | number | `80` | HTTP-Port |
+| `channel` | number | `0` | Kanal (0-basiert, z.B. 0 oder 1 beim Shelly 2.5) |
+| `type` | select | `relay` | Gerätetyp: `relay`, `light`, `color`, `white`, `roller`, `sensor` |
+| `rgbwRange` | select | `percent` | Wertebereich für RGBW-Ein-/Ausgänge: `0–100 %` oder `0–255` |
+| `interval` | number | `0` | Status-Abfrage-Intervall in Sekunden (0 = deaktiviert) |
+| `dimmOn` | select | `0` | Bei Dim > 0 automatisch einschalten |
+| `dimmOff` | select | `0` | Bei Dim = 0 automatisch ausschalten |
+| `autoFwUpdate` | select | `0` | Firmware automatisch aktualisieren wenn ein Update verfügbar ist |
+| `username` | text | – | Benutzername (nur wenn Auth aktiviert) |
+| `password` | password | – | Passwort – Gen 1: Basic Auth · Gen 2+: Digest Auth (SHA-256) |
+
+**Eingänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `onOff` | Ein/Aus (1 = ein, 0 = aus) |
+| `brightness` | Helligkeit 0–100 % (Dimmer/Light) |
+| `triggerStatus` | Trigger: Status sofort abfragen |
+| `fwUpdate` | Trigger: Firmware-Update starten |
+| `reboot` | Trigger: Gerät neu starten |
+| `openClose` | Jalousie: 1 = Auf, 0 = Zu |
+| `stop` | Jalousie: Stop-Trigger |
+| `position` | Jalousie: Zielposition 0–100 % |
+| `red` | Rot (Bereich je nach `rgbwRange`) |
+| `green` | Grün (Bereich je nach `rgbwRange`) |
+| `blue` | Blau (Bereich je nach `rgbwRange`) |
+| `white` | Weiß (Bereich je nach `rgbwRange`) |
+| `gain` | Gain 0–100 % |
+
+**Ausgänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `connected` | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
+| `onOff` | Status Ein/Aus (1/0) |
+| `brightness` | Helligkeit 0–100 % |
+| `power` | Aktuelle Leistung in W |
+| `energy` | Gesamtenergie in kWh |
+| `overpower` | Überlast (1 = Überlast, 0 = OK) |
+| `temp` | Gerätetemperatur in °C |
+| `overtemp` | Übertemperatur-Alarm (1/0) |
+| `fwAvailable` | Firmware-Update verfügbar (1/0) |
+| `red` | Rot (Bereich je nach `rgbwRange`) |
+| `green` | Grün (Bereich je nach `rgbwRange`) |
+| `blue` | Blau (Bereich je nach `rgbwRange`) |
+| `white` | Weiß (Bereich je nach `rgbwRange`) |
+| `gain` | Gain 0–100 % |
+| `extTemp1` | Externer Temperaturfühler 1 (°C, Shelly AddOn) |
+| `extTemp2` | Externer Temperaturfühler 2 (°C, Shelly AddOn) |
+| `extTemp3` | Externer Temperaturfühler 3 (°C, Shelly AddOn) |
+| `positionOut` | Aktuelle Jalousieposition 0–100 % |
+| `inputState` | Eingang-Status (0/1) |
+| `inputEvent` | Eingang-Event (z.B. `S`, `L`) |
+| `humidity` | Relative Luftfeuchte in % |
+| `battery` | Batterieladezustand in % |
+| `flood` | Leckage erkannt (1/0) |
+| `motion` | Bewegung erkannt (1/0) |
+| `tamper` | Tamper / Alarm (1/0) |
+
+**API-Unterschiede je Generation:**
+
+| | Gen 1 | Gen 2 / 3 / 4 |
+|---|---|---|
+| Steuern | `GET /relay/0?turn=on` | `POST /rpc` → `Switch.Set` |
+| Dimmen | `GET /light/0?brightness=80` | `POST /rpc` → `Light.Set` |
+| RGBW | `GET /color/0?red=…` | `POST /rpc` → `RGBW.Set` |
+| Jalousie | `GET /roller/0?go=open` | `POST /rpc` → `Cover.Open/Close/GoToPosition` |
+| Status | `GET /status` | `POST /rpc` → `Shelly.GetStatus` |
+| Auth | HTTP Basic Auth | Digest Auth (SHA-256, im JSON-Body) |
 
