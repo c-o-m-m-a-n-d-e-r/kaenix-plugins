@@ -310,6 +310,7 @@ module.exports = {
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
+| **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
 
 ### BWM – Konfiguration
 
@@ -455,4 +456,77 @@ Die Gerätegeneraion wird beim ersten Verbindungsaufbau automatisch per `GET /sh
 | Jalousie | `GET /roller/0?go=open` | `POST /rpc` → `Cover.Open/Close/GoToPosition` |
 | Status | `GET /status` | `POST /rpc` → `Shelly.GetStatus` |
 | Auth | HTTP Basic Auth | Digest Auth (SHA-256, im JSON-Body) |
+
+---
+
+### Philips Hue – Konfiguration
+
+Steuert Philips Hue Lampen und Gruppen über die **Hue Bridge API v1** (HTTP, kein HTTPS erforderlich).  
+Der Status-Punkt im Node-Titel zeigt grün (verbunden) / rot (getrennt) basierend auf dem letzten Status-Abruf.
+
+**Globale Einstellungen** (gelten für alle Hue-Nodes):
+
+| Parameter | Beschreibung |
+|-----------|--------------|
+| `ip` | IP-Adresse der Hue Bridge |
+| `port` | HTTP-Port (Standard: 80) |
+| `apiKey` | API Key / Bridge Username (aus der Bridge-Einrichtung) |
+
+**Node-Konfiguration:**
+
+| Parameter | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `ip` | text | – | Überschreibt globale IP (optional) |
+| `port` | number | – | Überschreibt globalen Port (optional) |
+| `apiKey` | text | – | Überschreibt globalen API Key (optional) |
+| `lightId` | number | `0` | Lampen-ID (0 = deaktiviert) |
+| `groupId` | number | `0` | Gruppen-ID (0 = deaktiviert, hat Vorrang wenn lightId = 0) |
+| `gamut` | select | `B` | Farbgamut: `A` (LivingColors, Bloom), `B` (Hue A19, Standard), `C` (Hue Go, LightStrips+) |
+| `intelliStart` | select | `0` | Intelli Start: Szene beim Einschalten setzen (1 = ja) |
+| `scene` | text | – | Szenen-ID die beim Einschalten gesetzt wird (nur bei Intelli Start) |
+| `startBri` | number | `0` | Starthelligkeit in % beim Einschalten (0 = deaktiviert) |
+| `interval` | number | `0` | Status-Polling-Intervall in Sekunden (0 = deaktiviert) |
+
+**Eingänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `onOff` | Ein/Aus (1 = ein, 0 = aus) |
+| `brightness` | Helligkeit 0–100 % |
+| `saturation` | Sättigung 0–100 % |
+| `colorTemp` | Farbtemperatur 0 (kalt/6500 K) bis 100 (warm/2000 K) |
+| `red` | Rot 0–100 |
+| `green` | Grün 0–100 |
+| `blue` | Blau 0–100 |
+| `hsv` | Farbe als gepackter Dezimalwert (RRGGBB hex → integer, z.B. `0xFF8800`) |
+| `scene` | Szene aktivieren (ID-String) |
+| `dim` | KNX 4-Bit Relativdimmer (DPT 3.007) |
+| `triggerStatus` | Trigger: Status sofort abfragen |
+
+**Ausgänge:**
+
+| Handle | Beschreibung |
+|--------|--------------|
+| `connected` | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
+| `onOff` | Status Ein/Aus (1/0) |
+| `brightness` | Helligkeit 0–100 % |
+| `saturation` | Sättigung 0–100 % |
+| `colorTemp` | Farbtemperatur 0–100 |
+| `red` | Rot 0–100 |
+| `green` | Grün 0–100 |
+| `blue` | Blau 0–100 |
+| `hsv` | Farbe als gepackter Dezimalwert (RRGGBB) |
+
+**Farbmodi im Vergleich:**
+
+| Modus | Eingang | Hue-API intern |
+|-------|---------|----------------|
+| Farbtemperatur | `colorTemp` 0–100 % | `ct` 153–500 Mired |
+| RGB | `red` / `green` / `blue` 0–100 | xy (CIE 1931, Gamut-korrigiert) |
+| HSV / Hex | `hsv` (Dezimalwert) | `hue` 0–65535 + `sat` + `bri` |
+| Szene | `scene` (ID-String) | `scene` direkt |
+
+**KNX 4-Bit Dimmer (DPT 3.007):**  
+Bit 3 = Richtung (1 = heller, 0 = dunkler), Bits 0–2 = Schrittweite 1–7.  
+Byte `0x00` = Stopp-Telegramm (wird ignoriert).
 
