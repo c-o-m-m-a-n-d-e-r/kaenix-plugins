@@ -26,9 +26,14 @@ function getState(nodeId) {
       ip:          null,
       port:        null,
       apiKey:      null,
+      lightId:     null,
+      groupId:     null,
       onoff:       false,
       bri:         254,
       gamutType:   null,  // wird aus capabilities der Bridge gelesen
+      lpRunning:   false, // Long-Poll-Loop aktiv
+      lpAbort:     false, // Flag zum Stoppen der Loop
+      lpEtag:      null,  // letzter ETag für If-None-Match
     });
   }
   return _states.get(nodeId);
@@ -143,18 +148,20 @@ const ctToPct   = (ct)  => Math.round((ct - 153) * 100 / (500 - 153));
 
 // ── HTTP-Helfer ────────────────────────────────────────────────────────────────
 
-function httpRequest(ip, port, method, path, body) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function httpRequest(ip, port, method, path, body, extraHeaders = {}, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const bodyStr = body != null ? JSON.stringify(body) : '';
-    const headers = { 'Content-Type': 'application/json', 'Connection': 'close' };
+    const headers = { 'Content-Type': 'application/json', 'Connection': 'close', ...extraHeaders };
     if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr);
 
     const req = http.request(
-      { hostname: ip, port, path, method, headers, timeout: 8000 },
+      { hostname: ip, port, path, method, headers, timeout: timeoutMs },
       (res) => {
         let raw = '';
         res.on('data', (c) => (raw += c));
-        res.on('end',  () => resolve({ status: res.statusCode, body: raw }));
+        res.on('end',  () => resolve({ status: res.statusCode, body: raw, headers: res.headers }));
       }
     );
     req.on('error',   reject);
@@ -377,8 +384,10 @@ module.exports = {
     { key: 'startBri', label: 'Starthelligkeit % (0 = deaktiviert)', type: 'number', placeholder: '0' },
 
     // ── Status-Polling ────────────────────────────────────────────────────────
-    { key: 'interval', label: 'Status-Intervall Sek. (0 = deaktiviert)', type: 'number', placeholder: '0' },
-  ],
+    { key: 'interval', label: 'Status-Intervall Sek. (leer = deaktiviert)', type: 'number', placeholder: '' },    {
+      key: 'longPoll', label: 'Long-Polling (Sofort-Updates von der Bridge)', type: 'select',
+      options: [{ value: '0', label: 'Deaktiviert' }, { value: '1', label: 'Aktiviert' }],
+    },  ],
 
   // ── Ausführung ────────────────────────────────────────────────────────────────
   execute(inputs, data, context) {
@@ -404,6 +413,7 @@ module.exports = {
       scene:        String(data.scene    || '').trim(),
       startBri:     parseInt(data.startBri, 10) || 0,
       interval:     parseInt(data.interval, 10) || 0,
+      longPoll:     parseInt(data.longPoll,  10) || 0,
     };
 
     // Pflichtfelder prüfen
@@ -414,21 +424,37 @@ module.exports = {
       return {};
     }
 
-    // Verbindungsparameter geändert → Timer zurücksetzen und neu verbinden
-    if (state.ip !== cfg.ip || state.port !== cfg.port || state.apiKey !== cfg.apiKey) {
-      state.ip     = cfg.ip;
-      state.port   = cfg.port;
-      state.apiKey = cfg.apiKey;
+    // Verbindungsparameter oder Lampen-ID geändert → alles zurücksetzen
+    const endpointChanged = state.ip !== cfg.ip || state.port !== cfg.port
+      || state.apiKey !== cfg.apiKey
+      || state.lightId !== cfg.lightId || state.groupId !== cfg.groupId;
+
+    if (endpointChanged) {
+      state.ip      = cfg.ip;
+      state.port    = cfg.port;
+      state.apiKey  = cfg.apiKey;
+      state.lightId = cfg.lightId;
+      state.groupId = cfg.groupId;
       if (state.timer) { clearInterval(state.timer); state.timer = null; }
+      stopLongPoll(state);
     }
 
-    // Status-Polling starten / stoppen
+    // Reguläres Status-Polling starten / stoppen
     if (cfg.interval > 0 && !state.timer) {
       state.timer = setInterval(() => fetchStatus(cfg, state), cfg.interval * 1000);
-      fetchStatus(cfg, state); // Sofortiger erster Abruf
+      fetchStatus(cfg, state);
     } else if (cfg.interval === 0 && state.timer) {
       clearInterval(state.timer);
       state.timer = null;
+    }
+
+    // Long-Polling starten / stoppen
+    if (cfg.longPoll && !state.lpRunning) {
+      // Einmalig sofortigen Status-Abruf machen, bevor die Loop wartet
+      fetchStatus(cfg, state);
+      startLongPoll(cfg, state);
+    } else if (!cfg.longPoll && state.lpRunning) {
+      stopLongPoll(state);
     }
 
     // ── Eingangsauswertung ────────────────────────────────────────────────────
