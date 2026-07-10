@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.0
+ * @version   1.0.1
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -330,7 +330,9 @@ async function fetchStatus(cfg, state) {
     }
     const jdat = JSON.parse(res.body);
     const fn   = state.generation >= 2 ? parseGen2Status : parseGen1Status;
-    fn(jdat, cfg, state.emit || (() => {}));
+    // Gen2+: Gerätedaten liegen im 'result'-Feld der RPC-Antwort
+    const data = state.generation >= 2 ? (jdat.result ?? jdat) : jdat;
+    fn(data, cfg, state.emit || (() => {}));
   } catch (e) {
     if (state.emit)  state.emit('connected', 0);
     if (state.warn)  state.warn(`Status-Fehler: ${e.message}`);
