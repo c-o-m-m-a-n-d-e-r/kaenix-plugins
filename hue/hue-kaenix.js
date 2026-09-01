@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.2
+ * @version   1.0.3
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -236,7 +236,7 @@ function parseAndEmit(data, mode, state, cfg) {
   if (s.sat   != null) state.emit('saturation', briToPct(s.sat));
   if (s.ct    != null) state.emit('colorTemp',  ctToPct(s.ct));
 
-  // XY → RGB → HSV
+  // XY → RGB → Farbe
   if (s.xy) {
     const brightness = s.bri != null ? s.bri / 254 : 1;
     const [r, g, b]  = xyToRGB(s.xy[0], s.xy[1], brightness);
@@ -245,9 +245,8 @@ function parseAndEmit(data, mode, state, cfg) {
     state.emit('green', Math.round(g * 100 / 255));
     state.emit('blue',  Math.round(b * 100 / 255));
 
-    // HSV als gepackter Dezimalwert (RRGGBB hex → integer)
-    const hexVal = (r << 16) | (g << 8) | b;
-    state.emit('hsv', hexVal);
+    // RGB-Objekt für DPT232.600 (0–255 je Kanal)
+    state.emit('hsv', { red: Math.round(r), green: Math.round(g), blue: Math.round(b) });
   }
 }
 
@@ -296,12 +295,20 @@ async function cmdRGB(cfg, r, g, b, gamutKey) {
   await setLightState(cfg, { xy });
 }
 
-async function cmdHsv(cfg, decimal, gamutKey) {
-  // Dezimalwert entspricht einem gepackten RGB-Farbwert (z.B. 0xFF8800 = Orange)
-  const n   = parseInt(decimal, 10) || 0;
-  const r   = (n >> 16) & 0xFF;
-  const g   = (n >>  8) & 0xFF;
-  const b   =  n        & 0xFF;
+async function cmdHsv(cfg, val, gamutKey) {
+  let r, g, b;
+  if (val !== null && typeof val === 'object') {
+    // DPT232.600 format: {red, green, blue} (0–255)
+    r = Math.round(val.red ?? 0);
+    g = Math.round(val.green ?? 0);
+    b = Math.round(val.blue ?? 0);
+  } else {
+    // Legacy packed RRGGBB integer
+    const n = parseInt(val, 10) || 0;
+    r = (n >> 16) & 0xFF;
+    g = (n >>  8) & 0xFF;
+    b =  n        & 0xFF;
+  }
 
   const [hue, sat, val] = rgb2hsv(r, g, b);
 
@@ -347,7 +354,7 @@ module.exports = {
     { handle: 'red',           label: 'Rot (0–100)' },
     { handle: 'green',         label: 'Grün (0–100)' },
     { handle: 'blue',          label: 'Blau (0–100)' },
-    { handle: 'hsv',           label: 'HSV / Farbe (Dezimalwert RRGGBB)' },
+    { handle: 'hsv',           label: 'Farbe RGB (DPT232.600)' },
     { handle: 'scene',         label: 'Szene (ID-String)' },
     { handle: 'dim',           label: 'Dimmer (KNX 4-Bit DPT 3.007)' },
     { handle: 'triggerStatus', label: 'Status abfragen (Trigger)' },
@@ -362,7 +369,7 @@ module.exports = {
     { handle: 'red',        label: 'Rot (0–100)' },
     { handle: 'green',      label: 'Grün (0–100)' },
     { handle: 'blue',       label: 'Blau (0–100)' },
-    { handle: 'hsv',        label: 'HSV / Farbe (Dezimalwert RRGGBB)' },
+    { handle: 'hsv',        label: 'Farbe RGB (DPT232.600)' },
   ],
 
   globalSettings: [
