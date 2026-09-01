@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.5
+ * @version   1.0.6
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -22,6 +22,7 @@ function getState(nodeId) {
       nodeLog:     null,
       setStatus:   null,   // context.setNodeStatus-Referenz
       prevInputs:  {},
+      prevEmitted: {},     // last emitted values for send-by-change
       timer:       null,
       ip:          null,
       port:        null,
@@ -202,8 +203,8 @@ async function fetchStatus(cfg, state) {
 }
 
 function stopLongPoll(state) {
-  state.lpAbort   = true;
-  state.lpRunning = false;
+  state.lpAbort = true;
+  // lpRunning is cleared by the loop itself when it exits
 }
 
 function startLongPoll(cfg, state) {
@@ -232,22 +233,35 @@ function parseAndEmit(data, mode, state, cfg) {
   state.emit('connected', 1);
   state.setStatus?.(true);
 
-  if (s.on    != null) { state.onoff = s.on;  state.emit('onOff',      s.on ? 1 : 0); }
-  if (s.bri   != null) { state.bri   = s.bri; state.emit('brightness', briToPct(s.bri)); }
-  if (s.sat   != null) state.emit('saturation', briToPct(s.sat));
-  if (s.ct    != null) state.emit('colorTemp',  ctToPct(s.ct));
+  // Only emit when value changed (send-by-change for polling)
+  const changed = (handle, value) => {
+    const cur = typeof value === 'object' ? JSON.stringify(value) : value;
+    if (state.prevEmitted[handle] === cur) return false;
+    state.prevEmitted[handle] = cur;
+    return true;
+  };
+
+  if (s.on    != null) { state.onoff = s.on;  if (changed('onOff',     s.on ? 1 : 0))       state.emit('onOff',      s.on ? 1 : 0); }
+  if (s.bri   != null) { state.bri   = s.bri; if (changed('brightness', briToPct(s.bri)))    state.emit('brightness', briToPct(s.bri)); }
+  if (s.sat   != null) { const v = briToPct(s.sat);  if (changed('saturation', v)) state.emit('saturation', v); }
+  if (s.ct    != null) { const v = ctToPct(s.ct);    if (changed('colorTemp',  v)) state.emit('colorTemp',  v); }
 
   // XY → RGB → Farbe
   if (s.xy) {
     const brightness = s.bri != null ? s.bri / 254 : 1;
     const [r, g, b]  = xyToRGB(s.xy[0], s.xy[1], brightness);
+    const rPct = Math.round(r * 100 / 255);
+    const gPct = Math.round(g * 100 / 255);
+    const bPct = Math.round(b * 100 / 255);
+    const rRaw = Math.round(r), gRaw = Math.round(g), bRaw = Math.round(b);
 
-    state.emit('red',   Math.round(r * 100 / 255));
-    state.emit('green', Math.round(g * 100 / 255));
-    state.emit('blue',  Math.round(b * 100 / 255));
+    if (changed('red',   rPct)) state.emit('red',   rPct);
+    if (changed('green', gPct)) state.emit('green', gPct);
+    if (changed('blue',  bPct)) state.emit('blue',  bPct);
 
     // RGB-Objekt für DPT232.600 (0–255 je Kanal)
-    state.emit('hsv', { red: Math.round(r), green: Math.round(g), blue: Math.round(b) });
+    const hsvObj = { red: rRaw, green: gRaw, blue: bRaw };
+    if (changed('hsv', hsvObj)) state.emit('hsv', hsvObj);
   }
 }
 
@@ -450,11 +464,12 @@ module.exports = {
       || state.lightId !== cfg.lightId || state.groupId !== cfg.groupId;
 
     if (endpointChanged) {
-      state.ip      = cfg.ip;
-      state.port    = cfg.port;
-      state.apiKey  = cfg.apiKey;
-      state.lightId = cfg.lightId;
-      state.groupId = cfg.groupId;
+      state.ip          = cfg.ip;
+      state.port        = cfg.port;
+      state.apiKey      = cfg.apiKey;
+      state.lightId     = cfg.lightId;
+      state.groupId     = cfg.groupId;
+      state.prevEmitted = {};
       if (state.timer) { clearInterval(state.timer); state.timer = null; }
       stopLongPoll(state);
     }
