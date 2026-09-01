@@ -342,7 +342,7 @@ async function fetchStatus(cfg, state) {
 // ── Befehle ────────────────────────────────────────────────────────────────────
 
 async function cmdOnOff(state, cfg, value) {
-  const on = !!parseInt(value, 10);
+  const on = !!+value; // handles boolean true/false and numeric 0/1 and strings "0"/"1"
   const ch = cfg.channel;
   if (state.generation >= 2) {
     await rpc(state, cfg, 'Switch.Set', { id: ch, on });
