@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.4
+ * @version   1.0.5
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -210,10 +210,11 @@ function startLongPoll(cfg, state) {
   state.lpAbort   = false;
   state.lpRunning = true;
   (async () => {
-    while (!state.lpAbort) {
-      await fetchStatus(cfg, state);
+    while (!state.lpAbort && (state.cfg ?? cfg).longPoll) {
+      await fetchStatus(state.cfg ?? cfg, state);
       await new Promise((r) => setTimeout(r, 1000));
     }
+    state.lpRunning = false;
   })();
 }
 
@@ -309,14 +310,9 @@ async function cmdHsv(cfg, val, gamutKey) {
     g = (n >>  8) & 0xFF;
     b =  n        & 0xFF;
   }
-
-  const [hue, sat, bri] = rgb2hsv(r, g, b);
-
-  await setLightState(cfg, {
-    hue: Math.round(182.04 * hue),     // Hue-API: 0–65535
-    sat: Math.round(2.54   * sat),     // Hue-API: 0–254
-    bri: Math.round(2.54   * bri),     // Hue-API: 1–254
-  });
+  // Use XY for accurate round-trip (same path as cmdRGB avoids HSV→XY→RGB drift)
+  const xy = rgbToXY(r, g, b, gamutKey || 'B');
+  await setLightState(cfg, { xy });
 }
 
 async function cmdScene(cfg, scene) {
@@ -438,6 +434,7 @@ module.exports = {
       interval:     parseInt(data.interval, 10) || 0,
       longPoll:     parseInt(data.longPoll,  10) || 0,
     };
+    state.cfg = cfg; // keep ref current for long-poll loop
 
     // Pflichtfelder prüfen
     if (!cfg.ip)     { context.warn('Hue Bridge IP-Adresse nicht konfiguriert'); return {}; }
