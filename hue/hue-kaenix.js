@@ -244,7 +244,7 @@ async function setLightState(cfg, payload) {
 }
 
 async function cmdOnOff(cfg, state, value) {
-  const on = !!parseInt(value, 10);
+  const on = !!+value; // handles boolean true/false and numeric 0/1 and strings "0"/"1"
   state.onoff = on;
 
   const payload = { on };
