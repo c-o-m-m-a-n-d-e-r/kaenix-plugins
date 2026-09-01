@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.1
+ * @version   1.0.2
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
