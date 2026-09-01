@@ -267,10 +267,20 @@ function parseAndEmit(data, mode, state, cfg) {
 
 // ── Steuerungsbefehle ──────────────────────────────────────────────────────────
 
-async function setLightState(cfg, payload) {
+async function setLightState(cfg, payload, state) {
   const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
   if (!ep) return;
-  await httpRequest(cfg.ip, cfg.port, 'PUT', `${ep.base}/${ep.mode}`, payload);
+  const res = await httpRequest(cfg.ip, cfg.port, 'PUT', `${ep.base}/${ep.mode}`, payload);
+  // Hue API returns 200 even for logical errors – log them for debugging
+  if (res.status === 200 && state) {
+    try {
+      const body = JSON.parse(res.body);
+      const errs = body.filter?.((r) => r.error);
+      if (errs?.length) {
+        errs.forEach((r) => state.warn?.(`Hue API: ${r.error.description} (type ${r.error.type})`));
+      }
+    } catch (_) {}
+  }
 }
 
 async function cmdOnOff(cfg, state, value) {
@@ -298,8 +308,9 @@ async function cmdSaturation(cfg, pct) {
   await setLightState(cfg, { sat: pctToBri(pct) });
 }
 
-async function cmdColorTemp(cfg, pct) {
-  await setLightState(cfg, { ct: pctToCT(pct) });
+async function cmdColorTemp(cfg, state, pct) {
+  const v = Math.min(100, Math.max(0, Number(pct) || 0));
+  await setLightState(cfg, { ct: pctToCT(v) }, state);
 }
 
 async function cmdRGB(cfg, r, g, b, gamutKey) {
@@ -524,7 +535,7 @@ module.exports = {
 
     // Farbtemperatur
     if (changed('colorTemp')) {
-      cmdColorTemp(cfg, inputs.colorTemp)
+      cmdColorTemp(cfg, state, inputs.colorTemp)
         .catch((e) => context.warn(`Farbtemperatur-Fehler: ${e.message}`));
     }
 
