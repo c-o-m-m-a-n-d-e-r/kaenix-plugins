@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.1
+ * @version   1.0.2
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -199,6 +199,22 @@ async function fetchStatus(cfg, state) {
     state.setStatus?.(false);
     if (state.warn) state.warn(`Status-Fehler: ${e.message}`);
   }
+}
+
+function stopLongPoll(state) {
+  state.lpAbort   = true;
+  state.lpRunning = false;
+}
+
+function startLongPoll(cfg, state) {
+  state.lpAbort   = false;
+  state.lpRunning = true;
+  (async () => {
+    while (!state.lpAbort) {
+      await fetchStatus(cfg, state);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  })();
 }
 
 function parseAndEmit(data, mode, state, cfg) {
