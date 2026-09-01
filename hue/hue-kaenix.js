@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.3
+ * @version   1.0.4
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -310,12 +310,12 @@ async function cmdHsv(cfg, val, gamutKey) {
     b =  n        & 0xFF;
   }
 
-  const [hue, sat, val] = rgb2hsv(r, g, b);
+  const [hue, sat, bri] = rgb2hsv(r, g, b);
 
   await setLightState(cfg, {
     hue: Math.round(182.04 * hue),     // Hue-API: 0–65535
     sat: Math.round(2.54   * sat),     // Hue-API: 0–254
-    bri: Math.round(2.54   * val),     // Hue-API: 1–254
+    bri: Math.round(2.54   * bri),     // Hue-API: 1–254
   });
 }
 
