@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.7
+ * @version   1.0.8
  * @author    kaenix
  * @website   https://www.kaenix.net
  */
@@ -230,7 +230,6 @@ function parseAndEmit(data, mode, state, cfg) {
   const s = data[mode];
   if (!s) return;
 
-  state.emit('connected', 1);
   state.setStatus?.(true);
 
   // Only emit when value changed (send-by-change for polling)
@@ -240,6 +239,8 @@ function parseAndEmit(data, mode, state, cfg) {
     state.prevEmitted[handle] = cur;
     return true;
   };
+
+  if (changed('connected', 1)) state.emit('connected', 1);
 
   if (s.on    != null) { state.onoff = s.on;  if (changed('onOff',     s.on ? 1 : 0))       state.emit('onOff',      s.on ? 1 : 0); }
   if (s.bri   != null) { state.bri   = s.bri; if (changed('brightness', briToPct(s.bri)))    state.emit('brightness', briToPct(s.bri)); }
