@@ -1,6 +1,6 @@
 /**
  * @plugin    Raum
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -24,6 +24,12 @@ module.exports = {
   config: [
     { key: 'pageId', label: 'Raum', type: 'room-picker' },
   ],
+
+  // Begrenzt die Neuauswertung auf Telegramme, die tatsächlich eine Status-GA
+  // eines Widgets im gewählten Raum betreffen (statt bei jedem Telegramm im Haus).
+  getWatchedAddresses(data, helpers) {
+    return data.pageId ? helpers.getRoomAddresses(data.pageId) : new Set();
+  },
 
   execute(inputs, data, context) {
     if (!data.pageId) return { out: 0 };
