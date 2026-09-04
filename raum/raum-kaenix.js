@@ -1,6 +1,6 @@
 /**
  * @plugin    Raum
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -23,17 +23,21 @@ module.exports = {
 
   config: [
     { key: 'pageId', label: 'Raum', type: 'room-picker' },
+    { key: 'excludedAddresses', label: 'Überwachte Widgets', type: 'room-widget-checklist' },
   ],
 
-  // Begrenzt die Neuauswertung auf Telegramme, die tatsächlich eine Status-GA
-  // eines Widgets im gewählten Raum betreffen (statt bei jedem Telegramm im Haus).
+  // Begrenzt die Neuauswertung auf Telegramme, die tatsächlich eine nicht abgewählte
+  // Status-GA eines Widgets im gewählten Raum betreffen (statt bei jedem Telegramm im Haus).
   getWatchedAddresses(data, helpers) {
-    return data.pageId ? helpers.getRoomAddresses(data.pageId) : new Set();
+    if (!data.pageId) return new Set();
+    const excluded = new Set(data.excludedAddresses || []);
+    const all = helpers.getRoomWidgetStatuses(data.pageId).map((w) => w.address);
+    return new Set(all.filter((a) => !excluded.has(a)));
   },
 
   execute(inputs, data, context) {
     if (!data.pageId) return { out: 0 };
-    const on = context.isRoomOn(data.pageId);
+    const on = context.isRoomOn(data.pageId, data.excludedAddresses);
     return { out: on ? 1 : 0 };
   },
 };
