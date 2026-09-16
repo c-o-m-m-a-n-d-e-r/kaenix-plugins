@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.1
+ * @version   1.0.3
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -197,7 +197,8 @@ function emitStatus(statusData, state, cfg) {
 
   // Send-by-change Helfer
   const changed = (handle, value) => {
-    const cur = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    if (value === undefined) return false;
+    const cur = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
     if (state.prevEmitted[handle] === cur) return false;
     state.prevEmitted[handle] = cur;
     return true;
@@ -552,6 +553,17 @@ module.exports = {
       context.nodeLog('✗ Keine IP');
       context.setNodeStatus(false);
       return {};
+    }
+
+    // Verbindungsparameter geändert → Zustand zurücksetzen
+    const endpointChanged = state.ip !== cfg.ip || state.port !== cfg.port;
+    if (endpointChanged) {
+      state.ip = cfg.ip;
+      state.port = cfg.port;
+      state.prevEmitted = {};
+      state.lpEtag = null;
+      if (state.timer) { clearInterval(state.timer); state.timer = null; }
+      stopLongPoll(state);
     }
 
     // Polling / Long-Polling initialisieren
