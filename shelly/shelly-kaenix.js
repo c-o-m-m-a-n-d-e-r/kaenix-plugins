@@ -1,7 +1,7 @@
 /**
  * @plugin    Shelly
- * @version   1.0.2
- * @author    kaenix
+ * @version   1.0.3
+ * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
 

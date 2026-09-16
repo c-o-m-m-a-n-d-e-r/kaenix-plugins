@@ -1,7 +1,7 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.8
- * @author    kaenix
+ * @version   1.0.9
+ * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
 
