@@ -211,19 +211,70 @@ function emitStatus(data, state, cfg) {
 }
 
 async function readPresets(cfg, state) {
-  if (state.presetsReadAt && (Date.now() - state.presetsReadAt < 60000)) return state.presets || [];
+  if (state.presetsReadAt && state.presets?.length && (Date.now() - state.presetsReadAt < 60000)) return state.presets || [];
   state.presetsReadAt = Date.now();
   try {
     const res = await httpRequest(cfg.ip, cfg.port, 'GET', '/presets', null, 3000);
-    if (res.status === 200 && res.json && Array.isArray(res.json)) {
-      state.presets = res.json.map((p, idx) => ({
-        id: String(p.id ?? idx + 1),
-        name: p.name || p.title || `Preset ${p.id ?? idx + 1}`,
-        coverUrl: p.artwork_url || p.icon || '',
-        kind: 'preset',
-        value: String(p.id ?? idx + 1),
-      }));
-      return state.presets;
+    if (res.status === 200) {
+      let rawList = [];
+      if (res.json) {
+        if (Array.isArray(res.json)) {
+          rawList = res.json;
+        } else if (Array.isArray(res.json.presets)) {
+          rawList = res.json.presets;
+        } else if (Array.isArray(res.json.item)) {
+          rawList = res.json.item;
+        } else if (Array.isArray(res.json.items)) {
+          rawList = res.json.items;
+        } else if (Array.isArray(res.json.data)) {
+          rawList = res.json.data;
+        } else if (Array.isArray(res.json.list)) {
+          rawList = res.json.list;
+        } else if (typeof res.json === 'object') {
+          rawList = Object.entries(res.json).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { name: v }) }));
+        }
+      }
+
+      if (rawList.length > 0) {
+        state.presets = rawList
+          .filter(p => p && (p.name || p.title || p.id))
+          .map((p, idx) => {
+            let cover = p.artwork_url || p.artwork || p.icon || p.image || '';
+            if (cover && cover.startsWith('/')) {
+              cover = `http://${cfg.ip}:${cfg.port || 15081}${cover}`;
+            }
+            return {
+              id: String(p.id ?? idx + 1),
+              name: p.name || p.title || `Preset ${p.id ?? idx + 1}`,
+              coverUrl: cover,
+              kind: 'preset',
+              value: String(p.id ?? idx + 1),
+            };
+          });
+        return state.presets;
+      }
+
+      // XML Fallback
+      if (res.body && typeof res.body === 'string') {
+        const presets = [];
+        const regex = /<(?:preset|item)(?:\s+([^>]*?))?>([\s\S]*?)<\/(?:preset|item)>/gi;
+        let m;
+        while ((m = regex.exec(res.body)) !== null) {
+          const attrStr = m[1] || '';
+          const innerXml = m[2] || '';
+          const id = attrStr.match(/id=["']([^"']*)["']/i)?.[1] || upnpTag(innerXml, 'id') || String(presets.length + 1);
+          const name = upnpTag(innerXml, 'name') || upnpTag(innerXml, 'title') || attrStr.match(/name=["']([^"']*)["']/i)?.[1] || `Preset ${id}`;
+          let cover = upnpTag(innerXml, 'artwork_url') || upnpTag(innerXml, 'icon') || upnpTag(innerXml, 'image') || attrStr.match(/artwork_url=["']([^"']*)["']/i)?.[1] || '';
+          if (cover && cover.startsWith('/')) {
+            cover = `http://${cfg.ip}:${cfg.port || 15081}${cover}`;
+          }
+          presets.push({ id: String(id), name, coverUrl: cover, kind: 'preset', value: String(id) });
+        }
+        if (presets.length > 0) {
+          state.presets = presets;
+          return presets;
+        }
+      }
     }
   } catch (_) {}
   return state.presets || [];

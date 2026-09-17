@@ -83,22 +83,28 @@ function isRadioSource(uri, metadata = '') {
 }
 
 async function readFavorites(cfg, state, force = false) {
-  if (!force && Date.now() - state.favoritesReadAt < 60000) return state.favorites;
+  if (!force && state.favorites?.length && (Date.now() - state.favoritesReadAt < 60000)) return state.favorites;
   state.favoritesReadAt = Date.now();
-  const items = [];
-  for (let start = 0; ; ) {
-    const res = await soapRequest(cfg.ip, cfg.port,
-      'urn:schemas-upnp-org:service:ContentDirectory:1', '/MediaServer/ContentDirectory/Control', 'Browse',
-      `<ObjectID>FV:2</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>${start}</StartingIndex><RequestedCount>100</RequestedCount><SortCriteria></SortCriteria>`, 3500);
-    if (res.status !== 200) throw new Error(`Favoriten HTTP ${res.status}`);
-    const page = getAllXmlTags(decodeDidl(getXmlTag(res.body, 'Result')), 'item');
-    items.push(...page);
-    const count = Number(getXmlTag(res.body, 'NumberReturned')) || page.length;
-    start += count;
-    if (!page.length || !count || start >= (Number(getXmlTag(res.body, 'TotalMatches')) || start)) break;
+  try {
+    const items = [];
+    for (let start = 0; ; ) {
+      const res = await soapRequest(cfg.ip, cfg.port,
+        'urn:schemas-upnp-org:service:ContentDirectory:1', '/MediaServer/ContentDirectory/Control', 'Browse',
+        `<ObjectID>FV:2</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>${start}</StartingIndex><RequestedCount>100</RequestedCount><SortCriteria></SortCriteria>`, 3500);
+      if (res.status !== 200) throw new Error(`Favoriten HTTP ${res.status}`);
+      const rawResult = getXmlTag(res.body, 'Result');
+      const decoded = decodeDidl(rawResult);
+      const page = getAllXmlTags(decoded, 'item');
+      items.push(...page);
+      const count = Number(getXmlTag(res.body, 'NumberReturned')) || page.length;
+      start += count;
+      if (!page.length || !count || start >= (Number(getXmlTag(res.body, 'TotalMatches')) || start)) break;
+    }
+    state.favorites = items;
+    return items;
+  } catch (_) {
+    return state.favorites || [];
   }
-  state.favorites = items;
-  return items;
 }
 
 function escapeXml(str) {
@@ -267,7 +273,7 @@ function emitStatus(data, state, cfg) {
     let favoritesList = [];
     if (state.favorites && state.favorites.length > 0) {
       favoritesList = state.favorites.map((it, idx) => {
-        const title = getXmlTag(it, 'title') || `Favorit ${idx + 1}`;
+        const title = getXmlTag(it, 'title') || getXmlTag(it, 'description') || getXmlTag(decodeDidl(getXmlTag(it, 'resMD')), 'title') || `Favorit ${idx + 1}`;
         let cover = metadataImage(it) || metadataImage(decodeDidl(getXmlTag(it, 'resMD'))) || '';
         if (cover && cover.startsWith('/')) {
           cover = `http://${cfg.ip}:${cfg.port || 1400}${cover}`;
@@ -330,6 +336,7 @@ async function fetchStatus(cfg, state) {
       soapRequest(cfg.ip, cfg.port, renderingService, renderingPath, 'GetMute', '<InstanceID>0</InstanceID><Channel>Master</Channel>', 3500),
       soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetTransportSettings', '<InstanceID>0</InstanceID>', 3500),
       soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetMediaInfo', '<InstanceID>0</InstanceID>', 3500),
+      readFavorites(cfg, state),
     ]);
 
     const hasAnySuccess = (resTransport.status === 'fulfilled' && resTransport.value.status === 200) ||
@@ -462,9 +469,9 @@ async function fetchStatus(cfg, state) {
     const trackInfo = isRadio
       ? normalizeTrackInfo(stationTitle, '', streamContent)
       : normalizeTrackInfo(title, artist, '');
-    title = isRadio ? stationTitle : trackInfo.title;
-    artist = isRadio ? '' : trackInfo.artist;
-    const trackText = trackInfo.trackText || title;
+    title = isRadio ? (stationTitle || trackInfo.title) : trackInfo.title;
+    artist = isRadio ? (trackInfo.artist || streamContent || '') : trackInfo.artist;
+    const trackText = trackInfo.trackText || (artist && title ? `${artist} - ${title}` : title);
 
     // Vollständige Cover-Image-URL zusammensetzen
     let fullImageUrl = image;
