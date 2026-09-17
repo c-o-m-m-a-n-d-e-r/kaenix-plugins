@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -91,6 +91,30 @@ function getAllXmlTags(xml, tag) {
     results.push(match[1].trim());
   }
   return results;
+}
+
+// Radio liefert den laufenden Titel häufig als „Interpret - Titel“ in
+// r:streamContent; dc:title enthält dann nur den Sendernamen.
+function normalizeTrackInfo(title, artist, streamContent) {
+  const content = (streamContent || '').trim();
+  const hasRadioContent = content && !/^ZPSTR_/i.test(content) && content !== 'NOT_IMPLEMENTED';
+  if (hasRadioContent) {
+    // Nur am ersten Trennzeichen teilen: Bindestriche im Titel bleiben erhalten.
+    const parts = content.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    if (parts) {
+      artist = parts[1].trim();
+      title = parts[2].trim();
+    } else {
+      // Freitext (z.B. Sendungsname) nicht als erfundenen Interpreten ausgeben.
+      title = content;
+      artist = '';
+    }
+  }
+  return {
+    title,
+    artist,
+    trackText: artist && title ? `${artist} - ${title}` : title || artist || '',
+  };
 }
 
 // ── UPnP / SOAP HTTP-Request ──────────────────────────────────────────────────
@@ -316,17 +340,11 @@ async function fetchStatus(cfg, state) {
       }
     }
 
-    // Formatierter Track-Text (Berücksichtigt auch Radio-StreamContent)
-    let trackText = '';
-    if (streamContent) {
-      trackText = title ? `${title}: ${streamContent}` : streamContent;
-    } else if (artist && title) {
-      trackText = `${artist} - ${title}`;
-    } else if (title) {
-      trackText = title;
-    } else if (artist) {
-      trackText = artist;
-    }
+    // Radio-Metadaten auf dieselben Titel-/Interpret-Ausgänge wie Musik abbilden.
+    const trackInfo = normalizeTrackInfo(title, artist, streamContent);
+    title = trackInfo.title;
+    artist = trackInfo.artist;
+    const trackText = trackInfo.trackText;
 
     // Vollständige Cover-Image-URL zusammensetzen
     let fullImageUrl = image;
