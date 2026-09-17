@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -347,11 +347,11 @@ async function fetchStatus(cfg, state) {
         rawState = st;
       }
 
-      title    = np.trackName || np.title || np.name || '';
-      artist   = np.artistName || np.artist || '';
-      album    = np.albumName || np.album || '';
-      source   = np.source || np.activeInput || '';
-      image    = np.albumArtUrl || np.artwork || np.image || '';
+      title    = np.trackName || np.title || np.name || (rawState !== 'standby' ? state.title : '') || '';
+      artist   = np.artistName || np.artist || ((title === state.title || !title) ? state.artist : '') || '';
+      album    = np.albumName || np.album || ((title === state.title || !title) ? state.album : '') || '';
+      source   = np.source || np.activeInput || state.source || '';
+      image    = np.albumArtUrl || np.artwork || np.image || ((title === state.title || !title) ? state.imageUrl : '') || '';
       duration = parseInt(np.duration || 0, 10) || 0;
       position = parseInt(np.timePosition || np.position || 0, 10) || 0;
 

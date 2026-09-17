@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -238,16 +238,20 @@ function emitStatus(statusData, state, cfg) {
       } catch (_) {}
     }
 
+    const effTitle = statusData.title || state.title || '';
+    const effArtist = statusData.artist || ((effTitle === state.title || !statusData.title) ? state.artist : '') || '';
+    const effCover = fullImageUrl || ((effTitle === state.title || !statusData.title) ? state.imageUrl : '') || '';
+
     state.updateMediaState({
       isPlaying: Boolean(statusData.isPlaying),
       state: statusData.state,
       volume: statusData.volume,
       isMuted: Boolean(statusData.mute),
       isPowerOn: Boolean(statusData.isPlaying || statusData.state === 'play' || statusData.state === 'stream'),
-      title: statusData.title,
-      artist: statusData.artist,
-      album: statusData.album,
-      coverUrl: fullImageUrl,
+      title: effTitle,
+      artist: effArtist,
+      album: statusData.album || state.album || '',
+      coverUrl: effCover,
       duration: '',
       position: '',
       shuffle: Boolean(statusData.shuffle),

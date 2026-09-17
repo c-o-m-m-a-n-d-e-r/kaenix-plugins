@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.14
+ * @version   1.0.15
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -481,12 +481,14 @@ async function fetchStatus(cfg, state) {
     const trackInfo = isRadio
       ? normalizeTrackInfo(stationTitle, '', streamContent)
       : normalizeTrackInfo(title, artist, '');
-    title = isRadio ? (stationTitle || trackInfo.title) : trackInfo.title;
-    artist = isRadio ? (trackInfo.artist || streamContent || '') : trackInfo.artist;
-    const trackText = trackInfo.trackText || (artist && title ? `${artist} - ${title}` : title);
+    title = isRadio ? (stationTitle || trackInfo.title || state.title || '') : (trackInfo.title || state.title || '');
+    artist = isRadio
+      ? (trackInfo.artist || streamContent || (title === state.title ? state.artist : '') || '')
+      : (trackInfo.artist || (title === state.title ? state.artist : '') || '');
+    const trackText = trackInfo.trackText || (artist && title ? `${artist} - ${title}` : title || artist || state.trackText || '');
 
     // Vollständige Cover-Image-URL zusammensetzen
-    let fullImageUrl = image;
+    let fullImageUrl = image || (title === state.title ? state.imageUrl : '');
     if (fullImageUrl && fullImageUrl.startsWith('/')) {
       fullImageUrl = `http://${cfg.ip}:${cfg.port || 1400}${fullImageUrl}`;
     }
