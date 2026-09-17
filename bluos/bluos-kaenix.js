@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -235,7 +235,7 @@ function emitStatus(statusData, state, cfg) {
 }
 
 async function fetchStatus(cfg, state) {
-  if (!cfg.ip) return;
+  if (!cfg.ip || state.disposed) return;
   try {
     const res = await httpRequest(cfg.ip, cfg.port, '/Status', 5000);
     if (res.status === 200) {
@@ -278,7 +278,7 @@ function stopLongPoll(state) {
 }
 
 function startLongPoll(cfg, state) {
-  if (state.lpRunning) return;
+  if (state.lpRunning || state.disposed) return;
   state.lpAbort   = false;
   state.lpRunning = true;
 
@@ -427,6 +427,10 @@ async function cmdPreset(cfg, state, presetId) {
   await sendCommand(cfg, state, `/Preset?id=${id}`);
 }
 
+async function cmdPlayUri(cfg, state, uri) {
+  await sendCommand(cfg, state, `/Play?url=${encodeURIComponent(uri)}`);
+}
+
 async function cmdShuffle(cfg, state, val) {
   const s = (val === 1 || val === '1' || val === true) ? 1 : 0;
   await sendCommand(cfg, state, `/Shuffle?state=${s}`);
@@ -440,6 +444,17 @@ async function cmdRepeat(cfg, state, val) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+  dispose(nodeId) {
+    for (const id of nodeId == null ? [..._states.keys()] : [nodeId]) {
+      const state = _states.get(id);
+      if (!state) continue;
+      clearInterval(state.timer);
+      stopLongPoll(state);
+      state.disposed = true;
+      state.emit = state.warn = state.nodeLog = state.setStatus = null;
+      _states.delete(id);
+    }
+  },
   type:        'bluos',
   category:    'Geräte',
   label:       'BluOS Player',
@@ -449,6 +464,7 @@ module.exports = {
   color:       '#0070BA',
 
   inputs: [
+    { handle: 'mediaFavorite', label: 'Favorit aus Musik-Widget (DPT28.001)' },
     { handle: 'play',          label: 'Play (Trigger)' },
     { handle: 'pause',         label: 'Pause (Trigger)' },
     { handle: 'stop',          label: 'Stop (Trigger)' },
@@ -483,27 +499,16 @@ module.exports = {
     { handle: 'repeat',     label: 'Repeat (0/1/2)' },
   ],
 
+  mediaFavorites: true,
   globalSettings: [
-    {
-      key:         'ip',
-      label:       'BluOS Player IP-Adresse',
-      type:        'text',
-      placeholder: '192.168.1.50',
-      description: 'Standard-IP-Adresse des BluOS Players',
-    },
-    {
-      key:         'port',
-      label:       'Port',
-      type:        'number',
-      placeholder: '11000',
-      description: 'Standard-Port der BluOS HTTP-API (11000)',
-    },
+    { key: 'mediaFavorites', label: 'Favoriten', type: 'favorites',
+      description: 'Gemeinsame Favoritenliste für Musik-Widgets. IP und Port werden pro Baustein eingestellt.' },
   ],
 
   config: [
     {
       key:         'ip',
-      label:       'IP-Adresse (überschreibt globale Einstellung)',
+      label:       'IP-Adresse',
       type:        'text',
       placeholder: '192.168.1.50',
     },
@@ -551,8 +556,8 @@ module.exports = {
 
     // Konfiguration zusammenführen
     const cfg = {
-      ip:         (data.ip && String(data.ip).trim()) || (context.globalSetting('ip') || '').trim(),
-      port:       parseInt(data.port || context.globalSetting('port') || '11000', 10),
+      ip:         String(data.ip || '').trim(),
+      port:       parseInt(data.port || '11000', 10),
       volumeStep: parseInt(data.volumeStep || '2', 10),
       longPoll:   data.longPoll !== '0',
       interval:   parseInt(data.interval || '0', 10),
@@ -560,7 +565,7 @@ module.exports = {
     state.cfg = cfg;
 
     if (!cfg.ip) {
-      context.warn('BluOS IP-Adresse nicht konfiguriert (weder in Node-Config noch in globalen Einstellungen)');
+      context.warn('BluOS IP-Adresse nicht konfiguriert (im Baustein einstellen)');
       context.nodeLog('✗ Keine IP');
       context.setNodeStatus(false);
       return {};
@@ -590,6 +595,11 @@ module.exports = {
       }
     }
 
+    if (context.initialInputs) {
+      state.prevInputs = { ...context.initialInputs };
+      return {};
+    }
+
     // Prüfen, ob sich ein Eingang geändert hat (Flankenerkennung für Trigger & Wertänderungen)
     const prev = state.prevInputs;
     const isTriggered = (handle) => {
@@ -605,6 +615,22 @@ module.exports = {
       if (val === undefined || val === null) return false;
       return prev[handle] !== val;
     };
+
+    // Auswahl enthält nur die ID; Name, Art und Wert stammen aus der gespeicherten Liste.
+    if (hasChanged('mediaFavorite')) {
+      try {
+        const selection = JSON.parse(String(inputs.mediaFavorite));
+        if (selection.list !== 'bluos') throw new Error('Favoritenliste passt nicht zum Plugin');
+        const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
+        const entry = entries.find(item => item.id === selection.id);
+        if (!entry) throw new Error('Favorit nicht mehr vorhanden');
+        if (entry.kind === 'preset') cmdPreset(cfg, state, entry.value);
+        else if (entry.kind === 'url') cmdPlayUri(cfg, state, entry.value);
+        else throw new Error('Unbekannte Favoritenart');
+      } catch (error) { state.warn?.(`Favorit: ${error.message}`); }
+      state.prevInputs = { ...inputs };
+      return {};
+    }
 
     // ── Befehle ausführen ──
 

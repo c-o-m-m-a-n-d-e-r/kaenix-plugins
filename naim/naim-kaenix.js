@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -8,6 +8,8 @@
 'use strict';
 
 const http = require('http');
+const dgram = require('dgram');
+const dns = require('dns').promises;
 
 // ── Modulweiter Zustand pro Node-Instanz ──────────────────────────────────────
 
@@ -179,7 +181,7 @@ function emitStatus(data, state, cfg) {
 }
 
 async function fetchStatus(cfg, state) {
-  if (!cfg.ip || state.isFetching) return;
+  if (!cfg.ip || state.isFetching || state.disposed) return;
   state.isFetching = true;
 
   try {
@@ -448,6 +450,84 @@ async function cmdPreset(cfg, state, presetId) {
   await sendCommand(cfg, state, 'POST', `/presets?id=${id}`);
 }
 
+// URL-Wiedergabe über den vom Gerät angekündigten UPnP-AVTransport-Service.
+// Der Control-Pfad und Port werden aus der Gerätebeschreibung gelesen.
+function upnpTag(xml, tag) {
+  const value = xml.match(new RegExp(`<(?:[\\w-]+:)?${tag}[^>]*>([\\s\\S]*?)</(?:[\\w-]+:)?${tag}>`, 'i'))?.[1] || '';
+  return value.trim().replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+function parseUpnpTransport(xml, location) {
+  const services = xml.match(/<(?:[\w-]+:)?service>[\s\S]*?<\/(?:[\w-]+:)?service>/gi) || [];
+  const service = services.find(item => /^urn:schemas-upnp-org:service:AVTransport:\d+$/.test(upnpTag(item, 'serviceType')));
+  if (!service || !upnpTag(service, 'controlURL')) throw new Error('Naim meldet keinen UPnP-AVTransport für URL-Wiedergabe');
+  return { service: upnpTag(service, 'serviceType'), url: new URL(upnpTag(service, 'controlURL'), upnpTag(xml, 'URLBase') || location).href };
+}
+
+async function discoverUpnpTransport(cfg) {
+  const { address } = await dns.lookup(cfg.ip, { family: 4 });
+  const location = await new Promise((resolve, reject) => {
+    const socket = dgram.createSocket('udp4');
+    let done = false;
+    const finish = (error, value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { socket.close(); } catch (_) {}
+      error ? reject(error) : resolve(value);
+    };
+    const timer = setTimeout(() => finish(new Error('Naim UPnP-Geräteerkennung: keine Antwort')), 4000);
+    socket.on('error', error => finish(error));
+    socket.on('message', (message, remote) => {
+      if (remote.address !== address) return;
+      const location = message.toString().match(/^location:\s*(.+)$/im)?.[1]?.trim();
+      if (location) finish(null, location);
+    });
+    socket.bind(0, () => {
+      const query = Buffer.from('M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: urn:schemas-upnp-org:service:AVTransport:1\r\n\r\n');
+      socket.send(query, 1900, '239.255.255.250', error => { if (error) finish(error); });
+    });
+  });
+  const endpoint = new URL(location);
+  if (endpoint.protocol !== 'http:') throw new Error('Nicht unterstützte UPnP-Gerätebeschreibung');
+  const result = await httpRequest(endpoint.hostname, Number(endpoint.port) || 80, 'GET', endpoint.pathname + endpoint.search);
+  if (result.status !== 200) throw new Error(`UPnP-Gerätebeschreibung HTTP ${result.status}`);
+  return parseUpnpTransport(result.body, location);
+}
+
+function upnpAction(transport, action, args) {
+  return new Promise((resolve, reject) => {
+    const body = `<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:${action} xmlns:u="${transport.service}">${args}</u:${action}></s:Body></s:Envelope>`;
+    const req = http.request(transport.url, {
+      method: 'POST', timeout: 4000,
+      headers: { 'Content-Type': 'text/xml; charset="utf-8"', SOAPAction: `"${transport.service}#${action}"`, 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      res.resume();
+      res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error(`UPnP ${action}: HTTP ${res.statusCode}`)));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('UPnP Timeout')));
+    req.end(body);
+  });
+}
+
+async function cmdPlayUri(cfg, state, uri) {
+  try {
+    if (state.upnpHost !== cfg.ip || !state.upnpTransport) {
+      state.upnpTransport = await discoverUpnpTransport(cfg);
+      state.upnpHost = cfg.ip;
+    }
+    const escapedUri = String(uri).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    await upnpAction(state.upnpTransport, 'SetAVTransportURI', `<InstanceID>0</InstanceID><CurrentURI>${escapedUri}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`);
+    await upnpAction(state.upnpTransport, 'Play', '<InstanceID>0</InstanceID><Speed>1</Speed>');
+    fetchStatus(cfg, state);
+  } catch (error) {
+    state.upnpTransport = null;
+    state.warn?.(`Naim URL-Wiedergabe: ${error.message}`);
+  }
+}
+
 // ── Shuffle & Repeat ──
 
 async function cmdShuffle(cfg, state, val) {
@@ -471,6 +551,16 @@ async function cmdRepeat(cfg, state, val) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+  dispose(nodeId) {
+    for (const id of nodeId == null ? [..._states.keys()] : [nodeId]) {
+      const state = _states.get(id);
+      if (!state) continue;
+      clearInterval(state.timer);
+      state.disposed = true;
+      state.emit = state.warn = state.nodeLog = state.setStatus = null;
+      _states.delete(id);
+    }
+  },
   type:        'naim',
   category:    'Geräte',
   label:       'Naim Audio Player',
@@ -480,6 +570,7 @@ module.exports = {
   color:       '#009E49',
 
   inputs: [
+    { handle: 'mediaFavorite', label: 'Favorit aus Musik-Widget (DPT28.001)' },
     { handle: 'power',         label: 'Power (0=Standby, 1=Ein)' },
     { handle: 'powerToggle',   label: 'Power Toggle (Trigger)' },
     { handle: 'play',          label: 'Play (Trigger)' },
@@ -520,27 +611,16 @@ module.exports = {
     { handle: 'repeat',     label: 'Repeat (0/1/2)' },
   ],
 
+  mediaFavorites: true,
   globalSettings: [
-    {
-      key:         'ip',
-      label:       'Naim Player IP-Adresse',
-      type:        'text',
-      placeholder: '192.168.1.60',
-      description: 'Standard-IP-Adresse des Naim Audio Players',
-    },
-    {
-      key:         'port',
-      label:       'Port',
-      type:        'number',
-      placeholder: '15081',
-      description: 'Standard-Port der Naim HTTP/REST-API (15081)',
-    },
+    { key: 'mediaFavorites', label: 'Favoriten', type: 'favorites',
+      description: 'Gemeinsame Favoritenliste für Musik-Widgets. IP und Port werden pro Baustein eingestellt.' },
   ],
 
   config: [
     {
       key:         'ip',
-      label:       'IP-Adresse (überschreibt globale Einstellung)',
+      label:       'IP-Adresse',
       type:        'text',
       placeholder: '192.168.1.60',
     },
@@ -579,15 +659,15 @@ module.exports = {
 
     // Konfiguration zusammenführen
     const cfg = {
-      ip:         (data.ip && String(data.ip).trim()) || (context.globalSetting('ip') || '').trim(),
-      port:       parseInt(data.port || context.globalSetting('port') || '15081', 10),
+      ip:         String(data.ip || '').trim(),
+      port:       parseInt(data.port || '15081', 10),
       volumeStep: parseInt(data.volumeStep || '2', 10),
       interval:   Math.max(1, parseInt(data.interval || '2', 10)),
     };
     state.cfg = cfg;
 
     if (!cfg.ip) {
-      context.warn('Naim IP-Adresse nicht konfiguriert (weder in Node-Config noch in globalen Einstellungen)');
+      context.warn('Naim IP-Adresse nicht konfiguriert (im Baustein einstellen)');
       context.nodeLog('✗ Keine IP');
       context.setNodeStatus(false);
       return {};
@@ -608,6 +688,11 @@ module.exports = {
       fetchStatus(cfg, state);
     }
 
+    if (context.initialInputs) {
+      state.prevInputs = { ...context.initialInputs };
+      return {};
+    }
+
     // Prüfen, ob sich ein Eingang geändert hat (Flankenerkennung für Trigger & Wertänderungen)
     const prev = state.prevInputs;
     const isTriggered = (handle) => {
@@ -622,6 +707,22 @@ module.exports = {
       if (val === undefined || val === null) return false;
       return prev[handle] !== val;
     };
+
+    // Auswahl enthält nur die ID; Name, Art und Wert stammen aus der gespeicherten Liste.
+    if (hasChanged('mediaFavorite')) {
+      try {
+        const selection = JSON.parse(String(inputs.mediaFavorite));
+        if (selection.list !== 'naim') throw new Error('Favoritenliste passt nicht zum Plugin');
+        const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
+        const entry = entries.find(item => item.id === selection.id);
+        if (!entry) throw new Error('Favorit nicht mehr vorhanden');
+        if (entry.kind === 'preset') cmdPreset(cfg, state, entry.value);
+        else if (entry.kind === 'url') cmdPlayUri(cfg, state, entry.value);
+        else throw new Error('Unbekannte Favoritenart');
+      } catch (error) { state.warn?.(`Favorit: ${error.message}`); }
+      state.prevInputs = { ...inputs };
+      return {};
+    }
 
     // ── Befehle ausführen ──
 
