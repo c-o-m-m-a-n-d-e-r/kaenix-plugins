@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.7
+ * @version   1.0.8
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -521,7 +521,7 @@ async function cmdStop(cfg, state) {
 
 async function cmdPlayPause(cfg, state) {
   if (state.isPlaying) {
-    await cmdPause(cfg, state);
+    await cmdStop(cfg, state);
   } else {
     await cmdPlay(cfg, state);
   }
@@ -755,7 +755,7 @@ module.exports = {
     { handle: 'play',          label: 'Play (Trigger)' },
     { handle: 'pause',         label: 'Pause (Trigger)' },
     { handle: 'stop',          label: 'Stop (Trigger)' },
-    { handle: 'playPause',     label: 'Play/Pause Toggle (Trigger)' },
+    { handle: 'playPause',     label: 'Play/Stop Toggle (0/1-Wechsel)' },
     { handle: 'next',          label: 'Nächster Titel (Trigger)' },
     { handle: 'prev',          label: 'Vorheriger Titel (Trigger)' },
     { handle: 'volume',        label: 'Lautstärke (0–100 %)' },
@@ -915,7 +915,7 @@ module.exports = {
       cmdPause(cfg, state);
     } else if (isTriggered('stop')) {
       cmdStop(cfg, state);
-    } else if (isTriggered('playPause')) {
+    } else if (hasChanged('playPause')) {
       cmdPlayPause(cfg, state);
     } else if (isTriggered('next')) {
       cmdNext(cfg, state);
