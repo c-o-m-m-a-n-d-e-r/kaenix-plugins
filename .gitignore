@@ -1,0 +1,11 @@
+# Standardmäßig alles ignorieren.
+*
+
+# Git-Konfiguration und Repository-Dokumentation behalten.
+!/.gitignore
+!/CNAME
+!/README.md
+
+# Nur Plugin-Dateien in den direkten Plugin-Unterordnern zulassen.
+!/*/
+!/*/*-kaenix.js
