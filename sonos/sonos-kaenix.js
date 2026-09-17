@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.5
+ * @version   1.0.6
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -43,6 +43,8 @@ function getState(nodeId) {
       uri:           '',
       isFetching:    false,
       cfg:           null,
+      favorites:     [],
+      favoritesReadAt: 0,
     });
   }
   return _states.get(nodeId);
@@ -53,14 +55,50 @@ function getState(nodeId) {
 function unescapeXml(str) {
   if (!str) return '';
   return str
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&');
+}
+
+// Nur die äußere DIDL-Hülle dekodieren. resMD enthält wiederum XML als Text;
+// zu frühes Entpacken verschachtelt dessen item-Tags mit dem Favoriten-item.
+function decodeDidl(value) {
+  let xml = (value || '').trim();
+  for (let i = 0; i < 3 && xml.startsWith('&'); i++) xml = unescapeXml(xml);
+  return xml;
+}
+
+function metadataImage(xml) {
+  return getXmlTag(xml, 'albumArtURI') || getXmlTag(xml, 'logo') || '';
+}
+
+function isRadioSource(uri, metadata = '') {
+  return /^(?:x-rincon-mp3radio|x-sonosapi-stream|x-sonosapi-radio|x-sonosapi-hls):/i.test(uri) ||
+    /audioBroadcast/i.test(getXmlTag(metadata, 'class') || '');
+}
+
+async function readFavorites(cfg, state, force = false) {
+  if (!force && Date.now() - state.favoritesReadAt < 60000) return state.favorites;
+  state.favoritesReadAt = Date.now();
+  const items = [];
+  for (let start = 0; ; ) {
+    const res = await soapRequest(cfg.ip, cfg.port,
+      'urn:schemas-upnp-org:service:ContentDirectory:1', '/MediaServer/ContentDirectory/Control', 'Browse',
+      `<ObjectID>FV:2</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>${start}</StartingIndex><RequestedCount>100</RequestedCount><SortCriteria></SortCriteria>`, 3500);
+    if (res.status !== 200) throw new Error(`Favoriten HTTP ${res.status}`);
+    const page = getAllXmlTags(decodeDidl(getXmlTag(res.body, 'Result')), 'item');
+    items.push(...page);
+    const count = Number(getXmlTag(res.body, 'NumberReturned')) || page.length;
+    start += count;
+    if (!page.length || !count || start >= (Number(getXmlTag(res.body, 'TotalMatches')) || start)) break;
+  }
+  state.favorites = items;
+  return items;
 }
 
 function escapeXml(str) {
@@ -298,12 +336,12 @@ async function fetchStatus(cfg, state) {
       const trackMetaRaw = getXmlTag(pBody, 'TrackMetaData');
       if (trackMetaRaw) {
         // DIDL-Lite entpacken (ist oft doppelt escaped im SOAP-Body)
-        const didl = unescapeXml(trackMetaRaw);
+        const didl = decodeDidl(trackMetaRaw);
         title         = getXmlTag(didl, 'title') || '';
         artist        = getXmlTag(didl, 'creator') || getXmlTag(didl, 'artist') || '';
         album         = getXmlTag(didl, 'album') || '';
         streamContent = getXmlTag(didl, 'streamContent') || '';
-        image         = getXmlTag(didl, 'albumArtURI') || '';
+        image         = metadataImage(didl);
         trackClass    = getXmlTag(didl, 'class') || '';
       }
     }
@@ -314,14 +352,32 @@ async function fetchStatus(cfg, state) {
     let mediaMeta = '';
     if (resMedia.status === 'fulfilled' && resMedia.value.status === 200) {
       mediaUri = getXmlTag(resMedia.value.body, 'CurrentURI') || '';
-      mediaMeta = unescapeXml(getXmlTag(resMedia.value.body, 'CurrentURIMetaData') || '');
+      mediaMeta = decodeDidl(getXmlTag(resMedia.value.body, 'CurrentURIMetaData'));
     }
-    const isRadio = [uri, mediaUri].some(value => /^(?:x-rincon-mp3radio|x-sonosapi-stream|x-sonosapi-radio|x-sonosapi-hls):/i.test(value)) ||
-      [trackClass, getXmlTag(mediaMeta, 'class') || ''].some(value => /audioBroadcast/i.test(value));
-    const stationTitle = isRadio ? getXmlTag(mediaMeta, 'title') || title : '';
-    if (isRadio && !image) {
-      image = getXmlTag(mediaMeta, 'albumArtURI') || '';
+    let isRadio = isRadioSource(mediaUri, mediaMeta) || isRadioSource(uri) || /audioBroadcast/i.test(trackClass);
+    let stationTitle = getXmlTag(mediaMeta, 'title') || '';
+    const stationImage = metadataImage(mediaMeta);
+    // Das Logo ist oft nur am äußeren Favoriten gespeichert, nicht in resMD.
+    // Auch bei Start über die Sonos-App anhand der aktuellen URI zuordnen.
+    if ((isRadio && (!stationTitle || (!image && !stationImage))) ||
+        (!isRadio && /^https?:/i.test(mediaUri || uri) && !stationTitle)) {
+      let favorites = state.favorites;
+      try { favorites = await readFavorites(cfg, state); } catch (_) { /* Zusatzdaten optional */ }
+      const currentUri = mediaUri || uri;
+      const favorite = currentUri && favorites.find(item => getXmlTag(item, 'res') === currentUri);
+      if (favorite) {
+        const favoriteMeta = decodeDidl(getXmlTag(favorite, 'resMD'));
+        isRadio = isRadio || isRadioSource(currentUri, favoriteMeta);
+        if (isRadio) {
+          stationTitle = stationTitle || getXmlTag(favorite, 'title') || getXmlTag(favoriteMeta, 'title') || '';
+          image = image || stationImage || metadataImage(favorite) || metadataImage(favoriteMeta);
+        }
+      }
     }
+    if (isRadio) image = image || stationImage;
+    // Track-Titel nur bei expliziten Sender-Metadaten als Sendername verwenden.
+    // Sonst wäre der gerade laufende Song fälschlich wieder der Stationsname.
+    if (!stationTitle && /audioBroadcast/i.test(trackClass)) stationTitle = title;
 
     // 3. Volume
     let volume = state.volume || 0;
@@ -360,7 +416,7 @@ async function fetchStatus(cfg, state) {
 
     // Songdetails bleiben in Stream-Info und Titelanzeige; der Titel-Ausgang
     // zeigt bei Radio den Sendernamen.
-    const trackInfo = normalizeTrackInfo(title, artist, streamContent);
+    const trackInfo = normalizeTrackInfo(isRadio ? stationTitle : title, artist, streamContent);
     title = isRadio ? stationTitle : trackInfo.title;
     artist = trackInfo.artist;
     const trackText = trackInfo.trackText || title;
@@ -625,30 +681,8 @@ async function cmdFavorite(cfg, state, favIdentifier) {
   }
 
   try {
-    // 1. Sonos Favoriten über ContentDirectory abrufen
-    const res = await soapRequest(
-      cfg.ip,
-      cfg.port,
-      'urn:schemas-upnp-org:service:ContentDirectory:1',
-      '/MediaServer/ContentDirectory/Control',
-      'Browse',
-      '<ObjectID>FV:2</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>0</StartingIndex><RequestedCount>100</RequestedCount><SortCriteria></SortCriteria>',
-      5000
-    );
-
-    if (res.status !== 200) {
-      state.warn?.(`Sonos Favoriten abrufen fehlgeschlagen (HTTP ${res.status})`);
-      return;
-    }
-
-    const resultRaw = getXmlTag(res.body, 'Result');
-    if (!resultRaw) {
-      state.warn?.('Keine Sonos Favoriten gefunden');
-      return;
-    }
-
-    const didl = unescapeXml(resultRaw);
-    const items = getAllXmlTags(didl, 'item');
+    // Metadaten inklusive äußerem Senderlogo für das Status-Polling behalten.
+    const items = await readFavorites(cfg, state, true);
     if (!items || items.length === 0) {
       state.warn?.('Keine Sonos Favoriten in der Liste');
       return;
@@ -819,6 +853,8 @@ module.exports = {
       state.ip = cfg.ip;
       state.port = cfg.port;
       state.prevEmitted = {};
+      state.favorites = [];
+      state.favoritesReadAt = 0;
       if (state.timer) { clearInterval(state.timer); state.timer = null; }
     }
 
