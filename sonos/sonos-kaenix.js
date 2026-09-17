@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -271,7 +271,7 @@ function emitStatus(data, state, cfg) {
 }
 
 async function fetchStatus(cfg, state) {
-  if (!cfg.ip || state.isFetching) return;
+  if (!cfg.ip || state.isFetching || state.disposed) return;
   state.isFetching = true;
 
   try {
@@ -359,7 +359,7 @@ async function fetchStatus(cfg, state) {
     const stationImage = metadataImage(mediaMeta);
     // Das Logo ist oft nur am äußeren Favoriten gespeichert, nicht in resMD.
     // Auch bei Start über die Sonos-App anhand der aktuellen URI zuordnen.
-    if ((isRadio && (!stationTitle || (!image && !stationImage))) ||
+    if ((isRadio && (!stationTitle || !stationImage)) ||
         (!isRadio && /^https?:/i.test(mediaUri || uri) && !stationTitle)) {
       let favorites = state.favorites;
       try { favorites = await readFavorites(cfg, state); } catch (_) { /* Zusatzdaten optional */ }
@@ -370,11 +370,11 @@ async function fetchStatus(cfg, state) {
         isRadio = isRadio || isRadioSource(currentUri, favoriteMeta);
         if (isRadio) {
           stationTitle = stationTitle || getXmlTag(favorite, 'title') || getXmlTag(favoriteMeta, 'title') || '';
-          image = image || stationImage || metadataImage(favorite) || metadataImage(favoriteMeta);
+          image = stationImage || metadataImage(favorite) || metadataImage(favoriteMeta) || image;
         }
       }
     }
-    if (isRadio) image = image || stationImage;
+    if (isRadio) image = stationImage || image;
     // Track-Titel nur bei expliziten Sender-Metadaten als Sendername verwenden.
     // Sonst wäre der gerade laufende Song fälschlich wieder der Stationsname.
     if (!stationTitle && /audioBroadcast/i.test(trackClass)) stationTitle = title;
@@ -414,9 +414,11 @@ async function fetchStatus(cfg, state) {
       }
     }
 
-    // Songdetails bleiben in Stream-Info und Titelanzeige; der Titel-Ausgang
-    // zeigt bei Radio den Sendernamen.
-    const trackInfo = normalizeTrackInfo(isRadio ? stationTitle : title, artist, streamContent);
+    // Radio zeigt die Station dauerhaft. Laufende Songdaten gehören allein
+    // zur Stream-Info und überschreiben weder Interpret noch Titelanzeige.
+    const trackInfo = isRadio
+      ? { title: stationTitle, artist: '', trackText: stationTitle }
+      : normalizeTrackInfo(title, artist, '');
     title = isRadio ? stationTitle : trackInfo.title;
     artist = trackInfo.artist;
     const trackText = trackInfo.trackText || title;
@@ -726,6 +728,20 @@ async function cmdFavorite(cfg, state, favIdentifier) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+  dispose(nodeId) {
+    const ids = nodeId == null ? [..._states.keys()] : [nodeId];
+    for (const id of ids) {
+      const state = _states.get(id);
+      if (!state) continue;
+      clearInterval(state.timer);
+      state.disposed = true;
+      state.emit = null;
+      state.warn = null;
+      state.nodeLog = null;
+      state.setStatus = null;
+      _states.delete(id);
+    }
+  },
   type:        'sonos',
   category:    'Geräte',
   label:       'Sonos Player',
@@ -867,6 +883,13 @@ module.exports = {
     } else if (state.timer) {
       clearInterval(state.timer);
       state.timer = null;
+    }
+
+    // Beim Reload nur Polling starten und die Flankenerkennung wiederherstellen.
+    // Ein bereits ausgewählter Favorit darf beim nächsten Signal nicht neu starten.
+    if (context.initialInputs) {
+      state.prevInputs = { ...context.initialInputs };
+      return {};
     }
 
     // Prüfen, ob sich ein Eingang geändert hat (Flankenerkennung für Trigger & Wertänderungen)
