@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.8
+ * @version   1.0.10
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -414,13 +414,13 @@ async function fetchStatus(cfg, state) {
       }
     }
 
-    // Radio zeigt die Station dauerhaft. Laufende Songdaten gehören allein
-    // zur Stream-Info und überschreiben weder Interpret noch Titelanzeige.
+    // Titel und Interpret bleiben bei Radio stabil; die Titelanzeige zeigt
+    // dagegen den laufenden Song aus den Stream-Metadaten.
     const trackInfo = isRadio
-      ? { title: stationTitle, artist: '', trackText: stationTitle }
+      ? normalizeTrackInfo(stationTitle, '', streamContent)
       : normalizeTrackInfo(title, artist, '');
     title = isRadio ? stationTitle : trackInfo.title;
-    artist = trackInfo.artist;
+    artist = isRadio ? '' : trackInfo.artist;
     const trackText = trackInfo.trackText || title;
 
     // Vollständige Cover-Image-URL zusammensetzen
@@ -521,7 +521,7 @@ async function cmdStop(cfg, state) {
 
 async function cmdPlayPause(cfg, state) {
   if (state.isPlaying) {
-    await cmdStop(cfg, state);
+    await cmdPause(cfg, state);
   } else {
     await cmdPlay(cfg, state);
   }
@@ -755,7 +755,7 @@ module.exports = {
     { handle: 'play',          label: 'Play (Trigger)' },
     { handle: 'pause',         label: 'Pause (Trigger)' },
     { handle: 'stop',          label: 'Stop (Trigger)' },
-    { handle: 'playPause',     label: 'Play/Stop Toggle (0/1-Wechsel)' },
+    { handle: 'playPause',     label: 'Play/Pause Toggle (0/1-Wechsel)' },
     { handle: 'next',          label: 'Nächster Titel (Trigger)' },
     { handle: 'prev',          label: 'Vorheriger Titel (Trigger)' },
     { handle: 'volume',        label: 'Lautstärke (0–100 %)' },
