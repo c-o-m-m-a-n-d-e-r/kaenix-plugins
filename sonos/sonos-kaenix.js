@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.12
+ * @version   1.0.13
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
