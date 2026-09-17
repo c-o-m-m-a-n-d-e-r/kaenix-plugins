@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -176,9 +176,17 @@ function httpRequest(ip, port, path, timeoutMs = 8000, reqRef = null) {
 
 // ── Status abrufen und Outputs emittieren ──────────────────────────────────────
 
+// Polling darf identische Statusmeldungen nicht wiederholt ins Debug-Log schreiben.
+function logStatusChange(state, message) {
+  if (state.prevEmitted._debugStatus === message) return;
+  state.prevEmitted._debugStatus = message;
+  state.nodeLog?.(message);
+}
+
 function emitStatus(statusData, state, cfg) {
   if (!state.emit || !statusData) return;
 
+  delete state.prevEmitted._connectionError;
   state.setStatus?.(true);
   state.state   = statusData.state;
   state.volume  = statusData.volume;
@@ -218,12 +226,12 @@ function emitStatus(statusData, state, cfg) {
   if (changed('shuffle', statusData.shuffle)) state.emit('shuffle', statusData.shuffle);
   if (changed('repeat', statusData.repeat)) state.emit('repeat', statusData.repeat);
 
-  // Status-Text für die Logic-Node im Editor
+  // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   const stateIcon = statusData.isPlaying ? '▶' : (statusData.state === 'pause' ? '⏸' : '⏹');
   const shortInfo = statusData.trackText
-    ? (statusData.trackText.length > 25 ? statusData.trackText.substring(0, 22) + '...' : statusData.trackText)
+    ? statusData.trackText
     : statusData.state;
-  state.nodeLog?.(`${stateIcon} ${shortInfo} (${statusData.volume}%)`);
+  logStatusChange(state, `${stateIcon} ${shortInfo} (${statusData.volume}%)`);
 }
 
 async function fetchStatus(cfg, state) {
@@ -250,8 +258,11 @@ function handleConnectionError(state, err) {
     state.emit?.('connected', 0);
   }
   state.setStatus?.(false);
-  state.nodeLog?.('✗ getrennt');
-  state.warn?.(`BluOS Verbindungsfehler: ${err.message}`);
+  logStatusChange(state, '✗ getrennt');
+  if (state.prevEmitted._connectionError !== err.message) {
+    state.prevEmitted._connectionError = err.message;
+    state.warn?.(`BluOS Verbindungsfehler: ${err.message}`);
+  }
 }
 
 // ── Long-Polling Schleife ─────────────────────────────────────────────────────

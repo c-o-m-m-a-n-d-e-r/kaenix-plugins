@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.2
+ * @version   1.0.3
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -112,9 +112,17 @@ function httpRequest(ip, port, method, path, bodyData = null, timeoutMs = 4000) 
 
 // ── Status abrufen und Outputs emittieren ──────────────────────────────────────
 
+// Polling darf identische Statusmeldungen nicht wiederholt ins Debug-Log schreiben.
+function logStatusChange(state, message) {
+  if (state.prevEmitted._debugStatus === message) return;
+  state.prevEmitted._debugStatus = message;
+  state.nodeLog?.(message);
+}
+
 function emitStatus(data, state, cfg) {
   if (!state.emit || !data) return;
 
+  delete state.prevEmitted._connectionError;
   state.setStatus?.(true);
   state.power     = data.power;
   state.state     = data.state;
@@ -158,15 +166,15 @@ function emitStatus(data, state, cfg) {
   if (changed('shuffle', data.shuffle))     state.emit('shuffle', data.shuffle);
   if (changed('repeat', data.repeat))       state.emit('repeat', data.repeat);
 
-  // Status-Text für die Logic-Node im Editor
+  // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   if (data.power === 0) {
-    state.nodeLog?.('⏻ Standby');
+    logStatusChange(state, '⏻ Standby');
   } else {
     const stateIcon = data.isPlaying ? '▶' : (data.state === 'paused' ? '⏸' : '⏹');
     const shortInfo = data.trackText
-      ? (data.trackText.length > 25 ? data.trackText.substring(0, 22) + '...' : data.trackText)
+      ? data.trackText
       : (data.source || data.state);
-    state.nodeLog?.(`${stateIcon} ${shortInfo} (${data.volume}%)`);
+    logStatusChange(state, `${stateIcon} ${shortInfo} (${data.volume}%)`);
   }
 }
 
@@ -308,8 +316,11 @@ function handleConnectionError(state, err) {
     state.emit?.('connected', 0);
   }
   state.setStatus?.(false);
-  state.nodeLog?.('✗ getrennt');
-  state.warn?.(`Naim Verbindungsfehler: ${err.message}`);
+  logStatusChange(state, '✗ getrennt');
+  if (state.prevEmitted._connectionError !== err.message) {
+    state.prevEmitted._connectionError = err.message;
+    state.warn?.(`Naim Verbindungsfehler: ${err.message}`);
+  }
 }
 
 // ── Steuerbefehle (Naim Player Commands) ───────────────────────────────────────

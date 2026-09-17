@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.2
+ * @version   1.0.3
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -146,9 +146,17 @@ function soapRequest(ip, port, serviceType, controlPath, action, argsXml = '', t
 
 // ── Status abrufen und Outputs emittieren ──────────────────────────────────────
 
+// Polling darf identische Statusmeldungen nicht wiederholt ins Debug-Log schreiben.
+function logStatusChange(state, message) {
+  if (state.prevEmitted._debugStatus === message) return;
+  state.prevEmitted._debugStatus = message;
+  state.nodeLog?.(message);
+}
+
 function emitStatus(data, state, cfg) {
   if (!state.emit || !data) return;
 
+  delete state.prevEmitted._connectionError;
   state.setStatus?.(true);
   state.state         = data.state;
   state.isPlaying     = data.isPlaying;
@@ -192,12 +200,12 @@ function emitStatus(data, state, cfg) {
   if (changed('repeat', data.repeat))       state.emit('repeat', data.repeat);
   if (changed('uri', data.uri))             state.emit('uri', data.uri);
 
-  // Status-Text für die Logic-Node im Editor
+  // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   const stateIcon = data.isPlaying ? '▶' : (data.state === 'pause' ? '⏸' : '⏹');
   const shortInfo = data.trackText
-    ? (data.trackText.length > 25 ? data.trackText.substring(0, 22) + '...' : data.trackText)
+    ? data.trackText
     : data.state;
-  state.nodeLog?.(`${stateIcon} ${shortInfo} (${data.volume}%)`);
+  logStatusChange(state, `${stateIcon} ${shortInfo} (${data.volume}%)`);
 }
 
 async function fetchStatus(cfg, state) {
@@ -357,8 +365,11 @@ function handleConnectionError(state, err) {
     state.emit?.('connected', 0);
   }
   state.setStatus?.(false);
-  state.nodeLog?.('✗ getrennt');
-  state.warn?.(`Sonos Verbindungsfehler: ${err.message}`);
+  logStatusChange(state, '✗ getrennt');
+  if (state.prevEmitted._connectionError !== err.message) {
+    state.prevEmitted._connectionError = err.message;
+    state.warn?.(`Sonos Verbindungsfehler: ${err.message}`);
+  }
 }
 
 // ── Steuerbefehle (Sonos UPnP Actions) ─────────────────────────────────────────
