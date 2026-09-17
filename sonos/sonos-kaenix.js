@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -242,12 +242,13 @@ async function fetchStatus(cfg, state) {
     const renderingService   = 'urn:schemas-upnp-org:service:RenderingControl:1';
     const renderingPath      = '/MediaRenderer/RenderingControl/Control';
 
-    const [resTransport, resPosition, resVolume, resMute, resSettings] = await Promise.allSettled([
+    const [resTransport, resPosition, resVolume, resMute, resSettings, resMedia] = await Promise.allSettled([
       soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetTransportInfo', '<InstanceID>0</InstanceID>', 3500),
       soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetPositionInfo', '<InstanceID>0</InstanceID>', 3500),
       soapRequest(cfg.ip, cfg.port, renderingService, renderingPath, 'GetVolume', '<InstanceID>0</InstanceID><Channel>Master</Channel>', 3500),
       soapRequest(cfg.ip, cfg.port, renderingService, renderingPath, 'GetMute', '<InstanceID>0</InstanceID><Channel>Master</Channel>', 3500),
       soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetTransportSettings', '<InstanceID>0</InstanceID>', 3500),
+      soapRequest(cfg.ip, cfg.port, avTransportService, avTransportPath, 'GetMediaInfo', '<InstanceID>0</InstanceID>', 3500),
     ]);
 
     const hasAnySuccess = (resTransport.status === 'fulfilled' && resTransport.value.status === 200) ||
@@ -286,6 +287,7 @@ async function fetchStatus(cfg, state) {
     let duration      = '';
     let position      = '';
     let uri           = '';
+    let trackClass    = '';
 
     if (resPosition.status === 'fulfilled' && resPosition.value.status === 200) {
       const pBody = resPosition.value.body;
@@ -302,7 +304,23 @@ async function fetchStatus(cfg, state) {
         album         = getXmlTag(didl, 'album') || '';
         streamContent = getXmlTag(didl, 'streamContent') || '';
         image         = getXmlTag(didl, 'albumArtURI') || '';
+        trackClass    = getXmlTag(didl, 'class') || '';
       }
+    }
+
+    // Sendername und Senderlogo stehen bei Radio häufig in den Transport-
+    // Metadaten statt in den Metadaten des gerade laufenden Titels.
+    let mediaUri = '';
+    let mediaMeta = '';
+    if (resMedia.status === 'fulfilled' && resMedia.value.status === 200) {
+      mediaUri = getXmlTag(resMedia.value.body, 'CurrentURI') || '';
+      mediaMeta = unescapeXml(getXmlTag(resMedia.value.body, 'CurrentURIMetaData') || '');
+    }
+    const isRadio = [uri, mediaUri].some(value => /^(?:x-rincon-mp3radio|x-sonosapi-stream|x-sonosapi-radio|x-sonosapi-hls):/i.test(value)) ||
+      [trackClass, getXmlTag(mediaMeta, 'class') || ''].some(value => /audioBroadcast/i.test(value));
+    const stationTitle = isRadio ? getXmlTag(mediaMeta, 'title') || title : '';
+    if (isRadio && !image) {
+      image = getXmlTag(mediaMeta, 'albumArtURI') || '';
     }
 
     // 3. Volume
@@ -340,11 +358,12 @@ async function fetchStatus(cfg, state) {
       }
     }
 
-    // Radio-Metadaten auf dieselben Titel-/Interpret-Ausgänge wie Musik abbilden.
+    // Songdetails bleiben in Stream-Info und Titelanzeige; der Titel-Ausgang
+    // zeigt bei Radio den Sendernamen.
     const trackInfo = normalizeTrackInfo(title, artist, streamContent);
-    title = trackInfo.title;
+    title = isRadio ? stationTitle : trackInfo.title;
     artist = trackInfo.artist;
-    const trackText = trackInfo.trackText;
+    const trackText = trackInfo.trackText || title;
 
     // Vollständige Cover-Image-URL zusammensetzen
     let fullImageUrl = image;
