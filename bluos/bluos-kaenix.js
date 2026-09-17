@@ -226,6 +226,36 @@ function emitStatus(statusData, state, cfg) {
   if (changed('shuffle', statusData.shuffle)) state.emit('shuffle', statusData.shuffle);
   if (changed('repeat', statusData.repeat)) state.emit('repeat', statusData.repeat);
 
+  // Status an verknüpftes Musik-Widget senden
+  if (state.updateMediaState) {
+    let favoritesList = [];
+    if (state.presets && state.presets.length > 0) {
+      favoritesList = state.presets;
+    }
+    if (!favoritesList.length && state.globalSetting) {
+      try {
+        favoritesList = JSON.parse(state.globalSetting('mediaFavorites') || '[]');
+      } catch (_) {}
+    }
+
+    state.updateMediaState({
+      isPlaying: Boolean(statusData.isPlaying),
+      state: statusData.state,
+      volume: statusData.volume,
+      isMuted: Boolean(statusData.mute),
+      isPowerOn: Boolean(statusData.isPlaying || statusData.state === 'play' || statusData.state === 'stream'),
+      title: statusData.title,
+      artist: statusData.artist,
+      album: statusData.album,
+      coverUrl: fullImageUrl,
+      duration: '',
+      position: '',
+      shuffle: Boolean(statusData.shuffle),
+      repeat: statusData.repeat,
+      favorites: favoritesList,
+    });
+  }
+
   // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   const stateIcon = statusData.isPlaying ? '▶' : (statusData.state === 'pause' ? '⏸' : '⏹');
   const shortInfo = statusData.trackText
@@ -234,10 +264,48 @@ function emitStatus(statusData, state, cfg) {
   logStatusChange(state, `${stateIcon} ${shortInfo} (${statusData.volume}%)`);
 }
 
+async function readPresets(cfg, state) {
+  if (state.presetsReadAt && (Date.now() - state.presetsReadAt < 60000)) return state.presets || [];
+  state.presetsReadAt = Date.now();
+  try {
+    const res = await httpRequest(cfg.ip, cfg.port, '/Presets', 4000);
+    if (res.status === 200 && res.body) {
+      const presets = [];
+      const regex = /<preset\s+([^>]+?)\/?>/gi;
+      let m;
+      while ((m = regex.exec(res.body)) !== null) {
+        const attrStr = m[1];
+        const id = attrStr.match(/id=["']([^"']*)["']/i)?.[1];
+        const name = unescapeXml(attrStr.match(/name=["']([^"']*)["']/i)?.[1] || '');
+        const image = attrStr.match(/image=["']([^"']*)["']/i)?.[1] || attrStr.match(/icon=["']([^"']*)["']/i)?.[1] || '';
+        let fullImage = image;
+        if (fullImage && fullImage.startsWith('/')) {
+          fullImage = `http://${cfg.ip}:${cfg.port || 11000}${fullImage}`;
+        }
+        if (id && name) {
+          presets.push({
+            id: String(id),
+            name,
+            coverUrl: fullImage,
+            kind: 'preset',
+            value: String(id),
+          });
+        }
+      }
+      state.presets = presets;
+      return presets;
+    }
+  } catch (_) {}
+  return state.presets || [];
+}
+
 async function fetchStatus(cfg, state) {
   if (!cfg.ip || state.disposed) return;
   try {
-    const res = await httpRequest(cfg.ip, cfg.port, '/Status', 5000);
+    const [res] = await Promise.all([
+      httpRequest(cfg.ip, cfg.port, '/Status', 5000),
+      readPresets(cfg, state),
+    ]);
     if (res.status === 200) {
       const parsed = parseStatusXml(res.body);
       if (parsed) {
@@ -291,6 +359,7 @@ function startLongPoll(cfg, state) {
       }
 
       try {
+        readPresets(currentCfg, state).catch(() => {});
         const etagParam = state.lpEtag ? `&etag=${encodeURIComponent(state.lpEtag)}` : '';
         const path = `/Status?timeout=30${etagParam}`;
         const reqRef = { current: null };
@@ -507,6 +576,12 @@ module.exports = {
 
   config: [
     {
+      key:         'widgetId',
+      label:       'Verknüpftes Musik-Widget (interne Steuerung)',
+      type:        'media-widget-picker',
+      description: 'Verknüpft diesen Player direkt mit einem Musik-Widget. Steuerung und Favoriten laufen intern ohne Gruppenadressen.',
+    },
+    {
       key:         'ip',
       label:       'IP-Adresse',
       type:        'text',
@@ -543,16 +618,106 @@ module.exports = {
     },
   ],
 
+  handleCommand(command, value, data, context) {
+    const nodeId = context.nodeId || 'default';
+    const state  = getState(nodeId);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
+
+    const cfg = {
+      ip:         String(data.ip || state.cfg?.ip || '').trim(),
+      port:       parseInt(data.port || state.cfg?.port || '11000', 10),
+      volumeStep: parseInt(data.volumeStep || state.cfg?.volumeStep || '2', 10),
+      longPoll:   data.longPoll !== '0',
+      interval:   parseInt(data.interval || state.cfg?.interval || '0', 10),
+    };
+    state.cfg = cfg;
+
+    if (!cfg.ip) {
+      context.warn('BluOS IP-Adresse nicht konfiguriert');
+      return false;
+    }
+
+    switch (command) {
+      case 'play':
+        cmdPlay(cfg, state);
+        break;
+      case 'pause':
+        cmdPause(cfg, state);
+        break;
+      case 'stop':
+        cmdStop(cfg, state);
+        break;
+      case 'playPause':
+      case 'togglePlay':
+        cmdPlayPause(cfg, state);
+        break;
+      case 'next':
+        cmdNext(cfg, state);
+        break;
+      case 'prev':
+        cmdPrev(cfg, state);
+        break;
+      case 'volume':
+        cmdVolume(cfg, state, value);
+        break;
+      case 'volumeInc':
+        cmdVolumeInc(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'volumeDec':
+        cmdVolumeDec(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'mute':
+        cmdMute(cfg, state, value);
+        break;
+      case 'muteToggle':
+        cmdMuteToggle(cfg, state);
+        break;
+      case 'shuffle':
+        cmdShuffle(cfg, state, value);
+        break;
+      case 'repeat':
+        cmdRepeat(cfg, state, value);
+        break;
+      case 'favorite':
+        if (typeof value === 'object' && value !== null) {
+          if (value.kind === 'url') cmdPlayUri(cfg, state, value.value);
+          else cmdPreset(cfg, state, value.value || value.id);
+        } else {
+          const globalFavs = (() => {
+            try { return JSON.parse(context.globalSetting('mediaFavorites') || '[]'); } catch (_) { return []; }
+          })();
+          const matched = globalFavs.find(f => f.id === value || String(f.id) === String(value));
+          if (matched) {
+            if (matched.kind === 'url') cmdPlayUri(cfg, state, matched.value);
+            else cmdPreset(cfg, state, matched.value);
+          } else {
+            cmdPreset(cfg, state, value);
+          }
+        }
+        break;
+      default:
+        return false;
+    }
+    return true;
+  },
+
   execute(inputs, data, context) {
     const nodeId = context.nodeId || 'default';
     const state  = getState(nodeId);
 
     // Callbacks aktualisieren
-    state.emit      = (h, v) => context.emitOutput(h, v);
-    state.warn      = (...a) => context.warn(...a);
-    state.log       = (...a) => context.log(...a);
-    state.nodeLog   = (...a) => context.nodeLog(...a);
-    state.setStatus = (connected) => context.setNodeStatus(connected);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.setStatus        = (connected) => context.setNodeStatus(connected);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
 
     // Konfiguration zusammenführen
     const cfg = {

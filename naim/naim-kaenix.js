@@ -168,6 +168,36 @@ function emitStatus(data, state, cfg) {
   if (changed('shuffle', data.shuffle))     state.emit('shuffle', data.shuffle);
   if (changed('repeat', data.repeat))       state.emit('repeat', data.repeat);
 
+  // Status an verknüpftes Musik-Widget senden
+  if (state.updateMediaState) {
+    let favoritesList = [];
+    if (state.presets && state.presets.length > 0) {
+      favoritesList = state.presets;
+    }
+    if (!favoritesList.length && state.globalSetting) {
+      try {
+        favoritesList = JSON.parse(state.globalSetting('mediaFavorites') || '[]');
+      } catch (_) {}
+    }
+
+    state.updateMediaState({
+      isPlaying: Boolean(data.isPlaying),
+      state: data.state,
+      volume: data.volume,
+      isMuted: Boolean(data.mute),
+      isPowerOn: Boolean(data.power),
+      title: data.title,
+      artist: data.artist,
+      album: data.album,
+      coverUrl: data.imageUrl,
+      duration: data.duration,
+      position: data.position,
+      shuffle: Boolean(data.shuffle),
+      repeat: data.repeat,
+      favorites: favoritesList,
+    });
+  }
+
   // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   if (data.power === 0) {
     logStatusChange(state, '⏻ Standby');
@@ -180,6 +210,25 @@ function emitStatus(data, state, cfg) {
   }
 }
 
+async function readPresets(cfg, state) {
+  if (state.presetsReadAt && (Date.now() - state.presetsReadAt < 60000)) return state.presets || [];
+  state.presetsReadAt = Date.now();
+  try {
+    const res = await httpRequest(cfg.ip, cfg.port, 'GET', '/presets', null, 3000);
+    if (res.status === 200 && res.json && Array.isArray(res.json)) {
+      state.presets = res.json.map((p, idx) => ({
+        id: String(p.id ?? idx + 1),
+        name: p.name || p.title || `Preset ${p.id ?? idx + 1}`,
+        coverUrl: p.artwork_url || p.icon || '',
+        kind: 'preset',
+        value: String(p.id ?? idx + 1),
+      }));
+      return state.presets;
+    }
+  } catch (_) {}
+  return state.presets || [];
+}
+
 async function fetchStatus(cfg, state) {
   if (!cfg.ip || state.isFetching || state.disposed) return;
   state.isFetching = true;
@@ -189,6 +238,7 @@ async function fetchStatus(cfg, state) {
       httpRequest(cfg.ip, cfg.port, 'GET', '/power', null, 3000),
       httpRequest(cfg.ip, cfg.port, 'GET', '/nowplaying', null, 3000),
       httpRequest(cfg.ip, cfg.port, 'GET', '/levels/room', null, 3000),
+      readPresets(cfg, state),
     ]);
 
     // Mindestens eine Anfrage muss erfolgreich sein
@@ -619,6 +669,12 @@ module.exports = {
 
   config: [
     {
+      key:         'widgetId',
+      label:       'Verknüpftes Musik-Widget (interne Steuerung)',
+      type:        'media-widget-picker',
+      description: 'Verknüpft diesen Player direkt mit einem Musik-Widget. Steuerung und Favoriten laufen intern ohne Gruppenadressen.',
+    },
+    {
       key:         'ip',
       label:       'IP-Adresse',
       type:        'text',
@@ -646,16 +702,114 @@ module.exports = {
     },
   ],
 
+  handleCommand(command, value, data, context) {
+    const nodeId = context.nodeId || 'default';
+    const state  = getState(nodeId);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
+
+    const cfg = {
+      ip:         String(data.ip || state.cfg?.ip || '').trim(),
+      port:       parseInt(data.port || state.cfg?.port || '15081', 10),
+      volumeStep: parseInt(data.volumeStep || state.cfg?.volumeStep || '2', 10),
+      interval:   Math.max(1, parseInt(data.interval || state.cfg?.interval || '2', 10)),
+    };
+    state.cfg = cfg;
+
+    if (!cfg.ip) {
+      context.warn('Naim IP-Adresse nicht konfiguriert');
+      return false;
+    }
+
+    switch (command) {
+      case 'power':
+        cmdPower(cfg, state, !!value);
+        break;
+      case 'powerToggle':
+        cmdPowerToggle(cfg, state);
+        break;
+      case 'play':
+        cmdPlay(cfg, state);
+        break;
+      case 'pause':
+        cmdPause(cfg, state);
+        break;
+      case 'stop':
+        cmdStop(cfg, state);
+        break;
+      case 'playPause':
+      case 'togglePlay':
+        cmdPlayPause(cfg, state);
+        break;
+      case 'next':
+        cmdNext(cfg, state);
+        break;
+      case 'prev':
+        cmdPrev(cfg, state);
+        break;
+      case 'volume':
+        cmdVolume(cfg, state, value);
+        break;
+      case 'volumeInc':
+        cmdVolumeInc(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'volumeDec':
+        cmdVolumeDec(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'mute':
+        cmdMute(cfg, state, value);
+        break;
+      case 'muteToggle':
+        cmdMuteToggle(cfg, state);
+        break;
+      case 'source':
+        cmdSource(cfg, state, value);
+        break;
+      case 'shuffle':
+        cmdShuffle(cfg, state, value);
+        break;
+      case 'repeat':
+        cmdRepeat(cfg, state, value);
+        break;
+      case 'favorite':
+        if (typeof value === 'object' && value !== null) {
+          if (value.kind === 'url') cmdPlayUri(cfg, state, value.value);
+          else cmdPreset(cfg, state, value.value || value.id);
+        } else {
+          const globalFavs = (() => {
+            try { return JSON.parse(context.globalSetting('mediaFavorites') || '[]'); } catch (_) { return []; }
+          })();
+          const matched = globalFavs.find(f => f.id === value || String(f.id) === String(value));
+          if (matched) {
+            if (matched.kind === 'url') cmdPlayUri(cfg, state, matched.value);
+            else cmdPreset(cfg, state, matched.value);
+          } else {
+            cmdPreset(cfg, state, value);
+          }
+        }
+        break;
+      default:
+        return false;
+    }
+    return true;
+  },
+
   execute(inputs, data, context) {
     const nodeId = context.nodeId || 'default';
     const state  = getState(nodeId);
 
     // Callbacks aktualisieren
-    state.emit      = (h, v) => context.emitOutput(h, v);
-    state.warn      = (...a) => context.warn(...a);
-    state.log       = (...a) => context.log(...a);
-    state.nodeLog   = (...a) => context.nodeLog(...a);
-    state.setStatus = (connected) => context.setNodeStatus(connected);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.setStatus        = (connected) => context.setNodeStatus(connected);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
 
     // Konfiguration zusammenführen
     const cfg = {

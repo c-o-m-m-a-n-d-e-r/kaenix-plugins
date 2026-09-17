@@ -262,6 +262,49 @@ function emitStatus(data, state, cfg) {
   if (changed('repeat', data.repeat))       state.emit('repeat', data.repeat);
   if (changed('uri', data.uri))             state.emit('uri', data.uri);
 
+  // Status an verknüpftes Musik-Widget senden
+  if (state.updateMediaState) {
+    let favoritesList = [];
+    if (state.favorites && state.favorites.length > 0) {
+      favoritesList = state.favorites.map((it, idx) => {
+        const title = getXmlTag(it, 'title') || `Favorit ${idx + 1}`;
+        let cover = metadataImage(it) || metadataImage(decodeDidl(getXmlTag(it, 'resMD'))) || '';
+        if (cover && cover.startsWith('/')) {
+          cover = `http://${cfg.ip}:${cfg.port || 1400}${cover}`;
+        }
+        return {
+          id: String(idx + 1),
+          name: title,
+          coverUrl: cover,
+          kind: 'preset',
+          value: String(idx + 1),
+        };
+      });
+    }
+    if (!favoritesList.length && state.globalSetting) {
+      try {
+        favoritesList = JSON.parse(state.globalSetting('mediaFavorites') || '[]');
+      } catch (_) {}
+    }
+
+    state.updateMediaState({
+      isPlaying: data.isPlaying,
+      state: data.state,
+      volume: data.volume,
+      isMuted: Boolean(data.mute),
+      isPowerOn: Boolean(data.isPlaying),
+      title: data.title,
+      artist: data.artist,
+      album: data.album,
+      coverUrl: data.imageUrl,
+      duration: data.duration,
+      position: data.position,
+      shuffle: Boolean(data.shuffle),
+      repeat: data.repeat,
+      favorites: favoritesList,
+    });
+  }
+
   // Status nur bei Änderung in der zentralen Debug-Ansicht ausgeben
   const stateIcon = data.isPlaying ? '▶' : (data.state === 'pause' ? '⏸' : '⏹');
   const shortInfo = data.trackText
@@ -799,6 +842,12 @@ module.exports = {
 
   config: [
     {
+      key:         'widgetId',
+      label:       'Verknüpftes Musik-Widget (interne Steuerung)',
+      type:        'media-widget-picker',
+      description: 'Verknüpft diesen Player direkt mit einem Musik-Widget. Steuerung und Favoriten laufen intern ohne Gruppenadressen.',
+    },
+    {
       key:         'ip',
       label:       'IP-Adresse',
       type:        'text',
@@ -826,16 +875,105 @@ module.exports = {
     },
   ],
 
+  handleCommand(command, value, data, context) {
+    const nodeId = context.nodeId || 'default';
+    const state  = getState(nodeId);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
+
+    const cfg = {
+      ip:         String(data.ip || state.cfg?.ip || '').trim(),
+      port:       parseInt(data.port || state.cfg?.port || '1400', 10),
+      volumeStep: parseInt(data.volumeStep || state.cfg?.volumeStep || '2', 10),
+      interval:   parseInt(data.interval != null ? data.interval : (state.cfg?.interval ?? '3'), 10),
+    };
+    state.cfg = cfg;
+
+    if (!cfg.ip) {
+      context.warn('Sonos IP-Adresse nicht konfiguriert');
+      return false;
+    }
+
+    switch (command) {
+      case 'play':
+        cmdPlay(cfg, state);
+        break;
+      case 'pause':
+        cmdPause(cfg, state);
+        break;
+      case 'stop':
+        cmdStop(cfg, state);
+        break;
+      case 'playPause':
+      case 'togglePlay':
+        cmdPlayPause(cfg, state);
+        break;
+      case 'next':
+        cmdNext(cfg, state);
+        break;
+      case 'prev':
+        cmdPrev(cfg, state);
+        break;
+      case 'volume':
+        cmdVolume(cfg, state, value);
+        break;
+      case 'volumeInc':
+        cmdVolumeInc(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'volumeDec':
+        cmdVolumeDec(cfg, state, value || cfg.volumeStep);
+        break;
+      case 'mute':
+        cmdMute(cfg, state, value);
+        break;
+      case 'muteToggle':
+        cmdMuteToggle(cfg, state);
+        break;
+      case 'shuffle':
+        cmdShuffle(cfg, state, value);
+        break;
+      case 'repeat':
+        cmdRepeat(cfg, state, value);
+        break;
+      case 'favorite':
+        if (typeof value === 'object' && value !== null) {
+          if (value.kind === 'url') cmdPlayUri(cfg, state, value.value);
+          else cmdFavorite(cfg, state, value.value || value.id);
+        } else {
+          const globalFavs = (() => {
+            try { return JSON.parse(context.globalSetting('mediaFavorites') || '[]'); } catch (_) { return []; }
+          })();
+          const matched = globalFavs.find(f => f.id === value || String(f.id) === String(value));
+          if (matched) {
+            if (matched.kind === 'url') cmdPlayUri(cfg, state, matched.value);
+            else cmdFavorite(cfg, state, matched.value);
+          } else {
+            cmdFavorite(cfg, state, value);
+          }
+        }
+        break;
+      default:
+        return false;
+    }
+    return true;
+  },
+
   execute(inputs, data, context) {
     const nodeId = context.nodeId || 'default';
     const state  = getState(nodeId);
 
     // Callbacks aktualisieren
-    state.emit      = (h, v) => context.emitOutput(h, v);
-    state.warn      = (...a) => context.warn(...a);
-    state.log       = (...a) => context.log(...a);
-    state.nodeLog   = (...a) => context.nodeLog(...a);
-    state.setStatus = (connected) => context.setNodeStatus(connected);
+    state.emit             = (h, v) => context.emitOutput(h, v);
+    state.warn             = (...a) => context.warn(...a);
+    state.log              = (...a) => context.log(...a);
+    state.nodeLog          = (...a) => context.nodeLog(...a);
+    state.setStatus        = (connected) => context.setNodeStatus(connected);
+    state.updateMediaState = (st) => context.updateMediaState?.(st);
+    state.globalSetting    = (k) => context.globalSetting?.(k);
 
     // Konfiguration zusammenführen
     const cfg = {
