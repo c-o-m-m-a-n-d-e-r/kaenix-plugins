@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
