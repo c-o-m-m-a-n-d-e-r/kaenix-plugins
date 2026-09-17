@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.13
+ * @version   1.0.14
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -82,6 +82,18 @@ function isRadioSource(uri, metadata = '') {
     /audioBroadcast/i.test(getXmlTag(metadata, 'class') || '');
 }
 
+const SONOS_PROMO_TITLES = /^(?:aktuell angesagt|lerne sonos radio kennen|sonos pr[aä]sentiert|angesagt auf sonos radio|neu auf sonos radio|discover sonos radio|featured on sonos radio|sonos radio promos?)$/i;
+
+function isUserFavorite(itemXml) {
+  if (!itemXml || typeof itemXml !== 'string') return false;
+  const uri = (getXmlTag(itemXml, 'res') || '').trim();
+  if (!uri) return false;
+  const title = (getXmlTag(itemXml, 'title') || getXmlTag(itemXml, 'description') || getXmlTag(decodeDidl(getXmlTag(itemXml, 'resMD')), 'title') || '').trim();
+  if (!title) return false;
+  if (SONOS_PROMO_TITLES.test(title)) return false;
+  return true;
+}
+
 async function readFavorites(cfg, state, force = false) {
   if (!force && state.favorites?.length && (Date.now() - state.favoritesReadAt < 60000)) return state.favorites;
   state.favoritesReadAt = Date.now();
@@ -94,7 +106,7 @@ async function readFavorites(cfg, state, force = false) {
       if (res.status !== 200) throw new Error(`Favoriten HTTP ${res.status}`);
       const rawResult = getXmlTag(res.body, 'Result');
       const decoded = decodeDidl(rawResult);
-      const page = getAllXmlTags(decoded, 'item');
+      const page = getAllXmlTags(decoded, 'item').filter(isUserFavorite);
       items.push(...page);
       const count = Number(getXmlTag(res.body, 'NumberReturned')) || page.length;
       start += count;
