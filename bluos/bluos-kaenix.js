@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.7
+ * @version   1.0.8
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -12,6 +12,52 @@ const http = require('http');
 // ── Modulweiter Zustand pro Node-Instanz ──────────────────────────────────────
 
 const _states = new Map();
+
+// A request stays pending until a fresh playback report confirms the start.
+function finishFavorite(state, request, status, error = '') {
+  if (state.favoriteRequest !== request) return;
+  clearTimeout(request.timer);
+  clearTimeout(request.pollTimer);
+  state.favoriteRequest = null;
+  const result = { id: request.id, requestId: request.requestId, status, error };
+  state.updateMediaState?.({ favoriteStatus: result });
+}
+
+function startFavorite(cfg, state, selection, action) {
+  clearTimeout(state.favoriteRequest?.timer);
+  clearTimeout(state.favoriteRequest?.pollTimer);
+  const request = { id: String(selection.id), requestId: selection.requestId || String(Date.now()), accepted: false };
+  state.favoriteRequest = request;
+  const result = { id: request.id, requestId: request.requestId, status: 'loading' };
+  state.updateMediaState?.({ favoriteStatus: result });
+  request.timer = setTimeout(() => finishFavorite(state, request, 'error', 'Wiedergabe wurde nicht bestätigt.'), 20000);
+  // Existing commands report failures through warn; keep the error tied to this request.
+  const commandState = new Proxy(state, { get(target, key) {
+    if (key === 'warn') return (...args) => {
+      finishFavorite(state, request, 'error', args.join(' '));
+      target.warn?.(...args);
+    };
+    return Reflect.get(target, key);
+  } });
+  Promise.resolve().then(() => state.favoriteRequest === request ? action(commandState) : undefined).then(() => {
+    if (state.favoriteRequest !== request) return;
+    request.accepted = true;
+    const poll = async () => {
+      if (state.favoriteRequest !== request) return;
+      try { await fetchStatus(cfg, commandState); }
+      catch (error) { finishFavorite(state, request, 'error', error.message); }
+      if (state.favoriteRequest === request) request.pollTimer = setTimeout(poll, 1000);
+    };
+    return poll();
+  }).catch(error => finishFavorite(state, request, 'error', error.message));
+}
+
+function confirmFavorite(state, data, request) {
+  if (request && request === state.favoriteRequest && request.accepted && data.isPlaying && ['play', 'playing', 'stream'].includes(data.state)) {
+    finishFavorite(state, request, 'playing');
+  }
+}
+
 
 function getState(nodeId) {
   if (!_states.has(nodeId)) {
@@ -183,8 +229,9 @@ function logStatusChange(state, message) {
   state.nodeLog?.(message);
 }
 
-function emitStatus(statusData, state, cfg) {
+function emitStatus(statusData, state, cfg, favoriteAtStart = null) {
   if (!state.emit || !statusData) return;
+  confirmFavorite(state, statusData, favoriteAtStart);
 
   delete state.prevEmitted._connectionError;
   state.setStatus?.(true);
@@ -305,6 +352,7 @@ async function readPresets(cfg, state) {
 
 async function fetchStatus(cfg, state) {
   if (!cfg.ip || state.disposed) return;
+  const favoriteAtStart = state.favoriteRequest?.accepted ? state.favoriteRequest : null;
   try {
     const [res] = await Promise.all([
       httpRequest(cfg.ip, cfg.port, '/Status', 5000),
@@ -314,7 +362,7 @@ async function fetchStatus(cfg, state) {
       const parsed = parseStatusXml(res.body);
       if (parsed) {
         if (parsed.etag) state.lpEtag = parsed.etag;
-        emitStatus(parsed, state, cfg);
+        emitStatus(parsed, state, cfg, favoriteAtStart);
       }
     } else {
       handleConnectionError(state, new Error(`HTTP ${res.status}`));
@@ -411,6 +459,7 @@ async function sendCommand(cfg, state, cmdPath) {
   }
   try {
     const res = await httpRequest(cfg.ip, cfg.port, cmdPath, 5000);
+    if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
     if (res.status === 200) {
       const parsed = parseStatusXml(res.body);
       if (parsed) {
@@ -521,6 +570,9 @@ module.exports = {
     for (const id of nodeId == null ? [..._states.keys()] : [nodeId]) {
       const state = _states.get(id);
       if (!state) continue;
+      clearTimeout(state.favoriteRequest?.timer);
+      clearTimeout(state.favoriteRequest?.pollTimer);
+      state.favoriteRequest = null;
       clearInterval(state.timer);
       stopLongPoll(state);
       state.disposed = true;
@@ -687,23 +739,16 @@ module.exports = {
       case 'repeat':
         cmdRepeat(cfg, state, value);
         break;
-      case 'favorite':
-        if (typeof value === 'object' && value !== null) {
-          if (value.kind === 'url') cmdPlayUri(cfg, state, value.value);
-          else cmdPreset(cfg, state, value.value || value.id);
-        } else {
-          const globalFavs = (() => {
-            try { return JSON.parse(context.globalSetting('mediaFavorites') || '[]'); } catch (_) { return []; }
-          })();
-          const matched = globalFavs.find(f => f.id === value || String(f.id) === String(value));
-          if (matched) {
-            if (matched.kind === 'url') cmdPlayUri(cfg, state, matched.value);
-            else cmdPreset(cfg, state, matched.value);
-          } else {
-            cmdPreset(cfg, state, value);
-          }
-        }
+      case 'favorite': {
+        const selection = typeof value === 'object' && value !== null ? value : { id: value };
+        startFavorite(cfg, state, selection, async commandState => {
+          const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
+          const entry = selection.kind ? selection : entries.find(f => String(f.id) === String(selection.id));
+          if (entry?.kind === 'url') await cmdPlayUri(cfg, commandState, entry.value);
+          else await cmdPreset(cfg, commandState, entry?.value || selection.id);
+        });
         break;
+      }
       default:
         return false;
     }
@@ -789,13 +834,15 @@ module.exports = {
     if (hasChanged('mediaFavorite')) {
       try {
         const selection = JSON.parse(String(inputs.mediaFavorite));
-        if (selection.list !== 'bluos') throw new Error('Favoritenliste passt nicht zum Plugin');
-        const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
-        const entry = entries.find(item => item.id === selection.id);
-        if (!entry) throw new Error('Favorit nicht mehr vorhanden');
-        if (entry.kind === 'preset') cmdPreset(cfg, state, entry.value);
-        else if (entry.kind === 'url') cmdPlayUri(cfg, state, entry.value);
-        else throw new Error('Unbekannte Favoritenart');
+        startFavorite(cfg, state, selection, async commandState => {
+          if (selection.list !== 'bluos') throw new Error('Favoritenliste passt nicht zum Plugin');
+          const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
+          const entry = entries.find(item => item.id === selection.id);
+          if (!entry) throw new Error('Favorit nicht mehr vorhanden');
+          if (entry.kind === 'preset') await cmdPreset(cfg, commandState, entry.value);
+          else if (entry.kind === 'url') await cmdPlayUri(cfg, commandState, entry.value);
+          else throw new Error('Unbekannte Favoritenart');
+        });
       } catch (error) { state.warn?.(`Favorit: ${error.message}`); }
       state.prevInputs = { ...inputs };
       return {};
