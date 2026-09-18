@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.8
+ * @version   1.0.9
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -218,10 +218,10 @@ function emitStatus(data, state, cfg, favoriteAtStart = null) {
   // Status an verknüpftes Musik-Widget senden
   if (state.updateMediaState) {
     let favoritesList = [];
-    if (state.presets && state.presets.length > 0) {
+    if (Array.isArray(state.presets)) {
       favoritesList = state.presets;
     }
-    if (!favoritesList.length && state.globalSetting) {
+    if (!Array.isArray(state.presets) && state.globalSetting) {
       try {
         favoritesList = JSON.parse(state.globalSetting('mediaFavorites') || '[]');
       } catch (_) {}
@@ -257,73 +257,81 @@ function emitStatus(data, state, cfg, favoriteAtStart = null) {
   }
 }
 
-async function readPresets(cfg, state) {
-  if (state.presetsReadAt && state.presets?.length && (Date.now() - state.presetsReadAt < 60000)) return state.presets || [];
-  state.presetsReadAt = Date.now();
-  try {
-    const res = await httpRequest(cfg.ip, cfg.port, 'GET', '/presets', null, 3000);
-    if (res.status === 200) {
-      let rawList = [];
-      if (res.json) {
-        if (Array.isArray(res.json)) {
-          rawList = res.json;
-        } else if (Array.isArray(res.json.presets)) {
-          rawList = res.json.presets;
-        } else if (Array.isArray(res.json.item)) {
-          rawList = res.json.item;
-        } else if (Array.isArray(res.json.items)) {
-          rawList = res.json.items;
-        } else if (Array.isArray(res.json.data)) {
-          rawList = res.json.data;
-        } else if (Array.isArray(res.json.list)) {
-          rawList = res.json.list;
-        } else if (typeof res.json === 'object') {
-          rawList = Object.entries(res.json).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { name: v }) }));
-        }
-      }
-
-      if (rawList.length > 0) {
-        state.presets = rawList
-          .filter(p => p && (p.name || p.title || p.id))
-          .map((p, idx) => {
-            let cover = p.artwork_url || p.artwork || p.icon || p.image || '';
-            if (cover && cover.startsWith('/')) {
-              cover = `http://${cfg.ip}:${cfg.port || 15081}${cover}`;
-            }
-            return {
-              id: String(p.id ?? idx + 1),
-              name: p.name || p.title || `Preset ${p.id ?? idx + 1}`,
-              coverUrl: cover,
-              kind: 'preset',
-              value: String(p.id ?? idx + 1),
-            };
-          });
-        return state.presets;
-      }
-
-      // XML Fallback
-      if (res.body && typeof res.body === 'string') {
-        const presets = [];
-        const regex = /<(?:preset|item)(?:\s+([^>]*?))?>([\s\S]*?)<\/(?:preset|item)>/gi;
-        let m;
-        while ((m = regex.exec(res.body)) !== null) {
-          const attrStr = m[1] || '';
-          const innerXml = m[2] || '';
-          const id = attrStr.match(/id=["']([^"']*)["']/i)?.[1] || upnpTag(innerXml, 'id') || String(presets.length + 1);
-          const name = upnpTag(innerXml, 'name') || upnpTag(innerXml, 'title') || attrStr.match(/name=["']([^"']*)["']/i)?.[1] || `Preset ${id}`;
-          let cover = upnpTag(innerXml, 'artwork_url') || upnpTag(innerXml, 'icon') || upnpTag(innerXml, 'image') || attrStr.match(/artwork_url=["']([^"']*)["']/i)?.[1] || '';
-          if (cover && cover.startsWith('/')) {
-            cover = `http://${cfg.ip}:${cfg.port || 15081}${cover}`;
-          }
-          presets.push({ id: String(id), name, coverUrl: cover, kind: 'preset', value: String(id) });
-        }
-        if (presets.length > 0) {
-          state.presets = presets;
-          return presets;
-        }
-      }
+// Device favourites use stable IDs (ussi), not their position in the list.
+function parsePresets(res, cfg, endpoint) {
+  let rows = null;
+  const json = res.json;
+  if (Array.isArray(json)) rows = json;
+  else if (json && typeof json === 'object') {
+    for (const key of ['favourites', 'favorites', 'presets', 'items', 'item', 'data', 'list', 'children']) {
+      if (Array.isArray(json[key])) { rows = json[key]; break; }
     }
-  } catch (_) {}
+    if (!rows && Object.values(json).every(v => v && typeof v === 'object' && (v.name || v.title))) {
+      rows = Object.entries(json).map(([id, entry]) => ({ id, ...entry }));
+    }
+  }
+  if (!rows && /^\s*</.test(res.body || '')) {
+    rows = [];
+    const regex = /<(preset|item|favourite)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+    for (const match of res.body.matchAll(regex)) {
+      const attr = name => match[2].match(new RegExp(`${name}=["']([^"']*)["']`, 'i'))?.[1];
+      rows.push({ id: attr('id') || upnpTag(match[3], 'id'),
+        name: upnpTag(match[3], 'name') || upnpTag(match[3], 'title') || attr('name'),
+        ussi: upnpTag(match[3], 'ussi'),
+        artwork: upnpTag(match[3], 'artwork_url') || upnpTag(match[3], 'icon') || upnpTag(match[3], 'image') || attr('artwork_url') });
+    }
+    if (!rows.length && !/<(?:presets|items|favourites)\b/i.test(res.body)) return null;
+  }
+  if (!rows) return null;
+  const seen = new Set();
+  return rows.flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object' || [false, 0, 'false', '0'].includes(entry.available)) return [];
+    const deviceId = String(entry.ussi || '').match(/(?:^|\/)favourites\/([a-zA-Z0-9_-]+)$/)?.[1];
+    const id = String(deviceId || entry.id || (endpoint === '/presets' ? index + 1 : ''));
+    if (!/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) return [];
+    seen.add(id);
+    const rawCover = entry.artwork_url || entry.artwork || entry.icon || entry.image || entry.imageUrl || '';
+    let coverUrl = '';
+    if (typeof rawCover === 'string' && rawCover) {
+      try {
+        const url = new URL(rawCover, `http://${cfg.ip}:${cfg.port || 15081}/`);
+        if (['http:', 'https:'].includes(url.protocol)) coverUrl = url.href;
+      } catch (_) {}
+    }
+    return [{ id, name: String(entry.name || entry.title || `Preset ${id}`), coverUrl,
+      kind: 'preset', value: id, source: 'device',
+      presetId: /^[1-9]\d*$/.test(String(entry.presetID || '')) ? String(entry.presetID) : null,
+      devicePath: endpoint === '/favourites' || deviceId ? `/favourites/${id}` : null }];
+  });
+}
+
+async function readPresets(cfg, state) {
+  const endpointKey = `${cfg.ip}:${cfg.port || 15081}`;
+  if (state.presetsEndpoint !== endpointKey) {
+    state.presetsEndpoint = endpointKey;
+    state.presets = undefined;
+    state.presetsReadAt = 0;
+  }
+  // Cache successful empty lists as well; errors retain the last known list.
+  if (state.presetsReadAt && Date.now() - state.presetsReadAt < 60000) return state.presets || [];
+  for (const endpoint of ['/favourites', '/presets']) {
+    try {
+      const res = await httpRequest(cfg.ip, cfg.port, 'GET', endpoint, null, 3000);
+      if (res.status !== 200) continue;
+      const presets = parsePresets(res, cfg, endpoint);
+      if (!presets || state.disposed || state.presetsEndpoint !== endpointKey) continue;
+      state.presets = presets;
+      state.presetsReadAt = Date.now();
+      delete state.prevEmitted?._presetsError;
+      // Publish independently of playback/power status, also when nothing is playing.
+      state.updateMediaState?.({ favorites: presets });
+      return presets;
+    } catch (_) {}
+  }
+  if (!state.disposed && state.prevEmitted && !state.prevEmitted._presetsError) {
+    state.prevEmitted._presetsError = true;
+    state.log?.('Naim Favoritenliste konnte nicht gelesen werden; erneuter Versuch beim nächsten Statusabruf.');
+  }
   return state.presets || [];
 }
 
@@ -592,8 +600,14 @@ async function cmdSource(cfg, state, sourceName) {
 }
 
 async function cmdPreset(cfg, state, presetId) {
-  const id = parseInt(presetId, 10);
-  if (isNaN(id) || id < 1) {
+  const key = String(presetId ?? '').trim();
+  const entry = state.presets?.find(p => p.id === key) || state.presets?.find(p => p.presetId === key);
+  if (entry?.devicePath && /^\/favourites\/[a-zA-Z0-9_-]+$/.test(entry.devicePath)) {
+    await sendCommand(cfg, state, 'GET', `${entry.devicePath}?cmd=play`);
+    return;
+  }
+  const id = Number(key);
+  if (!/^[1-9]\d*$/.test(key) || !Number.isSafeInteger(id)) {
     state.warn?.(`Ungültige Preset-ID: ${presetId}`);
     return;
   }
@@ -882,7 +896,8 @@ module.exports = {
         const selection = typeof value === 'object' && value !== null ? value : { id: value };
         startFavorite(cfg, state, selection, async commandState => {
           const entries = JSON.parse(context.globalSetting('mediaFavorites') || '[]');
-          const entry = selection.kind ? selection : entries.find(f => String(f.id) === String(selection.id));
+          const deviceEntry = state.presets?.find(f => String(f.id) === String(selection.id));
+          const entry = deviceEntry || (selection.kind ? selection : entries.find(f => String(f.id) === String(selection.id)));
           if (entry?.kind === 'url') await cmdPlayUri(cfg, commandState, entry.value);
           else await cmdPreset(cfg, commandState, entry?.value || selection.id);
         });
