@@ -1,6 +1,6 @@
 /**
  * @plugin    Raum
- * @version   1.0.2
+ * @version   1.0.3
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -10,11 +10,11 @@ module.exports = {
   category:    'Logik',
   label:       'Raum',
   description: 'Beobachtet alle Widgets eines Raums (Visu-Seite). Ausgang = 1, sobald ' +
-               'mindestens ein Widget-Status im Raum eingeschaltet ist, sonst 0.',
+               'mindestens ein Widget-Status im Raum eingeschaltet ist, sonst 0. ' +
+               'Der Schalteingang schreibt Ein/Aus auf alle ausgewählten überwachten GAs.',
   color:       '#0ea5e9',
 
-  // Kein fester Eingang – der Node wird bei jedem KNX-Telegramm neu ausgewertet.
-  inputs:  [],
+  inputs:  [{ handle: 'switch', label: 'Schalten (0=Aus, 1=Ein)' }],
   outputs: [{ handle: 'out', label: 'Status (1=Ein)' }],
 
   // Lässt die Logic Engine diesen Node-Typ bei JEDEM Bus-Telegramm neu auswerten,
@@ -37,6 +37,16 @@ module.exports = {
 
   execute(inputs, data, context) {
     if (!data.pageId) return { out: 0 };
+    // Jedes Eingangstelegramm zählt, auch mit identischem Wert. Statusereignisse
+    // und Initialisierung dürfen den gespeicherten Befehl nicht erneut senden.
+    if (context.triggerHandle === 'switch' && !context.initialInputs) {
+      const value = inputs.switch;
+      if ([0, 1, false, true, '0', '1'].includes(value)) {
+        context.switchRoom(data.pageId, Number(value), data.excludedAddresses);
+      } else {
+        context.warn('Schalteingang erwartet 0 oder 1');
+      }
+    }
     const on = context.isRoomOn(data.pageId, data.excludedAddresses);
     return { out: on ? 1 : 0 };
   },
