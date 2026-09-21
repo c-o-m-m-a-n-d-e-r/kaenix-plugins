@@ -630,3 +630,41 @@ nur ein explizites `isMoving`-Feld verwendet, falls die Firmware es bereitstellt
 
 Der Status-Trigger fragt aktiv ab, normales Polling liest den Hub-Zwischenspeicher.
 Batteriemessungen mit möglicher Jog-Bewegung werden nicht automatisch ausgelöst.
+
+### WLED – LED-Steuerung
+
+`wled/wled-kaenix.js`, Version **1.0.0**. Nutzt die lokale
+[WLED-JSON-API](https://kno.wled.ge/interfaces/json-api/) über HTTP, ohne zusätzliche
+Bibliotheken. IP und Port (Standard 80) sind global speicherbar und pro Node oder
+Eingang überschreibbar. Segment-ID standardmäßig 0.
+
+**Eingänge in Reihenfolge:** IP, Port, Segment-ID, Schalten, Toggle, Helligkeit,
+Segment Ein/Aus, RGB, Rot, Grün, Blau, Weiß, Farbtemperatur, Effekt,
+Effektgeschwindigkeit, Effektintensität, Farbpalette, Preset, Status Trigger,
+Status Intervall.
+
+**Ausgänge in Reihenfolge:** Verbindung, Status Ein/Aus, Helligkeit,
+Segment Ein/Aus, RGB, Rot, Grün, Blau, Weiß, Farbtemperatur, Effekt-ID,
+Effektgeschwindigkeit, Effektintensität, Farbpalette-ID, Preset-ID.
+
+- Schalten und Toggle akzeptieren 0/1. Jedes Toggle-Telegramm schaltet um.
+- Schalten und Helligkeit wirken auf das gesamte Gerät. Helligkeit 0 schaltet
+  aus, Werte über 0 schalten ein. Bei ausgeschaltetem Gerät ist die Rückmeldung 0 %.
+- Farben, Segment Ein/Aus, Farbtemperatur und Effekte betreffen ausschließlich
+  das konfigurierte, bereits vorhandene Segment. Die Node erstellt keine Segmente.
+- RGB nimmt einen gepackten RGB-Wert (DPT232.600) oder `#RRGGBB` entgegen.
+  Einzelkanäle, Helligkeit, Geschwindigkeit und Intensität verwenden 0–100 %.
+  Änderungen einzelner Farbkanäle erhalten die anderen Kanäle der Primärfarbe.
+- Weiß und Farbtemperatur benötigen geeignete LEDs und WLED-Konfiguration.
+  Farbtemperatur 0–100 % entspricht dem WLED-CCT-Regler (warm bis kalt).
+  Farbänderungen wechseln den laufenden Effekt nicht automatisch auf Solid.
+- Effekte und Paletten sind per ID oder eindeutigem Namen auswählbar; Presets
+  per ID 1–250 oder gespeichertem Namen. Ein Preset kann den gesamten
+  Gerätezustand einschließlich weiterer Segmente ändern. Presets werden nur
+  aufgerufen, nicht angelegt oder überschrieben. Preset-Rückmeldung -1 bedeutet
+  kein aktives Preset.
+- Status Trigger fragt nur bei 1 ab. Polling startet automatisch, standardmäßig
+  alle 10 Sekunden; Intervall 0 deaktiviert es. Beim Serverstart erfolgt eine
+  initiale Abfrage, ohne gespeicherte Befehle erneut auszuführen.
+- Outputs melden nur Änderungen zurück. Verbindungsabbrüche werden angezeigt;
+  bei aktivem Polling wird die Verbindung erneut geprüft.
