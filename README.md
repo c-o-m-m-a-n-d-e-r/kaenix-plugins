@@ -530,3 +530,49 @@ Der Status-Punkt im Node-Titel zeigt grün (verbunden) / rot (getrennt) basieren
 Bit 3 = Richtung (1 = heller, 0 = dunkler), Bits 0–2 = Schrittweite 1–7.  
 Byte `0x00` = Stopp-Telegramm (wird ignoriert).
 
+
+### Somfy Tahoma – lokale Steuerung
+
+`somfy-tahoma/somfy-tahoma-kaenix.js`, Version **1.0.0**. Benötigt eine
+TaHoma-Box mit aktiviertem [Developer Mode und lokalem Token](https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode).
+Die Kommunikation erfolgt ausschließlich über die lokale HTTPS-API auf Port 8443.
+
+Unter **Plugins → Somfy Tahoma → Einstellungen** IP-Adresse und Token speichern.
+Eingang 1 und 2 überschreiben diese Werte für die jeweilige Node. Pro Node den
+Gerätenamen oder die vollständige Geräte-ID (`deviceURL`, beispielsweise
+`io://1234-5678-9012/123456#1`) konfigurieren oder über Eingang 3/4 zuführen.
+Die Geräte-ID hat Vorrang; Namen müssen innerhalb der Box eindeutig sein.
+
+| Eingang | Funktion |
+|---|---|
+| 1 / 2 | IP-Adresse / Token; leer = globale Einstellung |
+| 3 / 4 | Gerätename / vollständige Geräte-ID |
+| 5 | Schalten: 0 = aus, 1 = ein |
+| 6 | Toggle: jedes 0- oder 1-Telegramm schaltet um |
+| 7 | Dimmwert 0–100 % |
+| 8 / 9 | Öffnen / Schliessen, jeweils bei jedem 0- oder 1-Telegramm |
+| 10 | Auf/Ab: 0 = auf, 1 = ab |
+| 11 | Stop, bei jedem 0- oder 1-Telegramm |
+| 12 | Position: 0 % = offen, 100 % = geschlossen |
+| 13 | Lamellenwinkel 0–100 % gemäß TaHoma-Geräteskala |
+| 14 | Status Trigger: Abfrage bei jedem 0- oder 1-Telegramm |
+| 15 | Statusintervall in Sekunden; Standard 10, 0 deaktiviert Polling; Minimum 1 |
+
+Die fünf Ausgänge liefern **Status**, **Helligkeit**, **Position**,
+**Lamellenwinkel** und **Fährt**. Nur vorhandene, gültige Gerätestatuswerte werden
+bei Änderungen ausgegeben. Insbesondere wird „Fährt“ aus `core:MovingState`
+abgeleitet, nicht aus einer angenommenen Laufzeit. Geräte ohne Rückkanal
+(z. B. manche RTS-Antriebe) liefern entsprechend keine verlässlichen Rückmeldungen.
+Befehle werden vor dem Senden gegen die vom Gerät angebotenen Fähigkeiten geprüft.
+Nicht jedes Gerät unterstützt Dimmen, absolute Position oder Lamellensteuerung.
+Der Status-Trigger liest den zuletzt in der Box bekannten Zustand; er erzwingt
+keine Funkabfrage des Antriebs.
+
+Beim Serverstart erfolgt sofort eine Statusabfrage und anschließend das konfigurierte
+Polling. Gespeicherte Schalt- und Fahrbefehle werden nicht erneut ausgeführt.
+
+Das öffentliche Overkiz-CA-Zertifikat ist im Plugin enthalten; die TLS-Zertifikatskette
+wird geprüft. Bei Verbindung über eine IP entfällt die Hostnamenprüfung, weil das
+Box-Zertifikat einen Gateway-Namen enthält. Optional kann global die Gateway-PIN
+hinterlegt werden, um zusätzlich `gateway-<PIN>.local` als Zertifikatsnamen zu prüfen.
+Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
