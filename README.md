@@ -576,3 +576,57 @@ wird geprüft. Bei Verbindung über eine IP entfällt die Hostnamenprüfung, wei
 Box-Zertifikat einen Gateway-Namen enthält. Optional kann global die Gateway-PIN
 hinterlegt werden, um zusätzlich `gateway-<PIN>.local` als Zertifikatsnamen zu prüfen.
 Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
+
+### PowerView – Hunter Douglas / Luxaflex
+
+`powerview/powerview-kaenix.js`, Version **1.0.0**. Lokale HTTP-Steuerung für
+PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
+sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
+verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
+(Standardport 80); die entsprechenden Node-Eingänge überschreiben diese Vorgaben.
+
+Ein Gerät wird anhand seiner numerischen ID oder seines eindeutigen Namens
+gewählt, wahlweise in der Node-Konfiguration oder über die Eingänge. Die ID hat
+Vorrang. Szenen funktionieren auch ohne zugeordnetes Gerät.
+
+| Eingang | Funktion |
+|---|---|
+| 1 / 2 | IP-Adresse / Port (Standard 80) |
+| 3 / 4 | Gerätename / Geräte-ID |
+| 5 | Auf/Ab: 0 = auf, 1 = ab |
+| 6 / 7 / 8 | Öffnen / Schliessen / Stop: nur Telegramme mit Wert 1 |
+| 9 | Position: 0 % = offen, 100 % = geschlossen |
+| 10 | Lamellenwinkel 0–100 % des unterstützten Verstellbereichs |
+| 11 | Szene aktivieren: ID oder eindeutiger Name, ID hat Vorrang |
+| 12 | Status Trigger: bei 1 Gerät über `refresh=true` abfragen |
+| 13 | Statusintervall in Sekunden: Standard 10, 0 = Polling aus, Minimum 1 |
+
+Die Ausgänge sind in dieser Reihenfolge **Verbindungsstatus**, **Position**,
+**Lamellenwinkel**, **Batterie**, **Batteriewarnung**, **Fährt**. Unveränderte Werte
+werden nicht erneut ausgegeben. Polling startet automatisch nach Serverstart;
+gespeicherte Fahrbefehle und Szenen werden dabei nicht wiederholt.
+
+Die Umsetzung orientiert sich an der [PowerView-Referenzimplementierung aiopvapi](https://github.com/sander76/aio-powerview-api).
+Gen 1/2 nutzen `/api`, Gen 3 `/home` mit eigener Befehlsstruktur. Die jeweiligen
+Positionswerte werden in Prozent umgerechnet. Gen 1 unterstützt keinen Stop-Befehl.
+Lamellenbefehle werden anhand des Gerätetyps geprüft; bei Typen, die nur im
+abgesenkten Zustand kippen können, muss der Behang zuvor geschlossen sein.
+Bei mehrteiligen Behängen steuert der Positionseingang nur die primäre Schiene;
+für kombinierte Positionen beider Schienen eine PowerView-Szene verwenden.
+
+**Batterie:** Gen 1/2 liefern einen Spannungswert, der als Prozent-Näherung
+umgerechnet wird. Gen 3 liefert nur Stufen, ausgegeben als 0/20/50/100 %.
+Die Batteriewarnung folgt der niedrigsten/leeren Batteriestufe, ersatzweise
+≤20 %. Bei bekannter Netzversorgung werden keine Batterieprozente erfunden.
+
+**Fährt:** Die Standard-API liefert nicht überall eine verlässliche Rückmeldung.
+Ohne expliziten Fahrstatus bleibt dieser Ausgang daher unbelegt. Optional kann
+pro Node eine Laufzeitschätzung in Sekunden aktiviert werden (Standard 0 = aus).
+Dann bedeutet 1: eigener Fahrbefehl angenommen; nach Ablauf oder Stop folgt 0.
+Das ist eine Schätzung, kein gemessener Motorstatus. Fahrten über Fernbedienungen,
+Apps und Szenen werden dadurch nicht erkannt. Für eine echte Rückmeldung wird
+nur ein explizites `isMoving`-Feld verwendet, falls die Firmware es bereitstellt;
+`velocity` oder gespeicherte Fahrbefehle werden nicht als Motorstatus interpretiert.
+
+Der Status-Trigger fragt aktiv ab, normales Polling liest den Hub-Zwischenspeicher.
+Batteriemessungen mit möglicher Jog-Bewegung werden nicht automatisch ausgelöst.
