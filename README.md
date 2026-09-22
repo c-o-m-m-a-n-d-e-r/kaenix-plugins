@@ -668,3 +668,52 @@ Effektgeschwindigkeit, Effektintensität, Farbpalette-ID, Preset-ID.
   initiale Abfrage, ohne gespeicherte Befehle erneut auszuführen.
 - Outputs melden nur Änderungen zurück. Verbindungsabbrüche werden angezeigt;
   bei aktivem Polling wird die Verbindung erneut geprüft.
+
+### Fronius – Solar API und Überschuss-Schaltungen
+
+`fronius/fronius-kaenix.js`, Version **1.0.0**. Überträgt die Funktionen der
+Python-Vorlage Fronius 14166 / 0.481 auf die lokale Fronius Solar API V1.
+Das Plugin gehört zur orangefarbenen Kategorie Geräte und benötigt keine
+zusätzlichen Bibliotheken. Die Solar API muss am Wechselrichter verfügbar und
+aktiviert sein. IP und HTTP-Port (Standard 80) können global gespeichert und
+pro Node überschrieben werden. Eingänge haben Vorrang vor Node-Einstellungen.
+Die Wechselrichter-ID ist pro Node einstellbar (Standard 1).
+
+**Eingänge in Reihenfolge:** Fronius IP, Intervall (Sekunden), Überschuss 1 Start,
+Überschuss 1 Ende, Überschuss 2 Start, Überschuss 2 Ende, Überschuss 3 Start,
+Überschuss 3 Ende, Auszeit.
+
+**Ausgänge in Reihenfolge:** PV Last, Haus Last, Netz Last, Batterie Last,
+Batterie Ladezustand, Überschuss 1, Überschuss 2, Überschuss 3, Einspeisen?,
+Energie Tag, Energie Jahr, Energie Total, Strom L1, Strom L2, Strom L3,
+Spannung L1, Spannung L2, Spannung L3.
+
+- Leistungen in W: Hausverbrauch positiv, Netzleistung positiv bei Einspeisung
+  und negativ bei Bezug, Batterieleistung positiv beim Laden und negativ beim
+  Entladen. Ladezustand in %, Energie in Wh, Phasenströme in A, Spannungen in V.
+  Leistung und Energie werden wie in der Vorlage auf ganze Zahlen gerundet.
+- Leistungswerte beziehen sich auf die gesamte Anlage (`Site`), Ladezustand,
+  Energie und Phasenwerte auf die konfigurierte Wechselrichter-ID.
+- Jeder Überschusskanal schaltet bei Netzleistung **über Start** ein und nach
+  der konfigurierten Anzahl aufeinanderfolgender Messungen **unter Ende** aus.
+  Dazwischen bleibt der Zustand erhalten. Ende muss unter Start liegen;
+  negative Ende-Werte sind erlaubt. Start 0 deaktiviert den Kanal.
+- Auszeit bedeutet **Abfragen, nicht Sekunden**, Standard 3; 0 schaltet bei der
+  ersten Unterschreitung aus. Die fehlerhaften Zähler der Vorlage wurden
+  korrigiert: Bei Erholung wird der jeweilige Zähler zurückgesetzt.
+- Eine initiale Abfrage startet automatisch, auch nach einem Serverneustart.
+  Das Intervall (Standard 10 Sekunden, 0 = keine Wiederholung) beginnt nach
+  Abschluss der Abfragen. Abfragen überlappen sich nicht.
+- Fehlende oder nicht unterstützte Messwerte bleiben unbelegt bzw. behalten
+  den letzten Wert; es werden keine Nullwerte erfunden. Insbesondere Tages- und
+  Jahresenergie sowie Phasenwerte sind modellabhängig. Ausgänge senden Änderungen.
+- Fehlende Netzleistung oder ein Ausfall der Leistungsabfrage schaltet alle
+  Überschuss-Ausgänge auf 0. Bei Verbindungsfehlern wird der Node-Status rot;
+  mit aktivem Intervall wird automatisch erneut abgefragt. Einzelne Fehler
+  der Energie-/Phasenabfrage blockieren die Leistungsabfrage nicht.
+- Konfigurationsänderungen setzen Überschusskanäle zurück und starten eine neue
+  Abfrage. Beim Entfernen/Deaktivieren der Node werden Timer und Anfragen beendet.
+
+Referenz: [Fronius Solar API V1](https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42%2C0410%2C2012.pdf).
+Lizenz entsprechend der Vorlage: GPL-3.0-or-later, ursprünglicher Copyright-Hinweis
+knx-user-forum e.V.; siehe Plugin-Kopf.
