@@ -1,6 +1,6 @@
 /**
  * @plugin    Somfy Tahoma
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Local API: https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode
@@ -178,7 +178,7 @@ const actions = ['switch', 'toggle', 'brightness', 'open', 'close', 'upDown', 's
 const settings = ['ip', 'token', 'deviceName', 'deviceId', 'interval'];
 
 module.exports = {
-  type: 'somfy-tahoma', category: 'Geräte', label: 'Somfy Tahoma', color: '#f5a623',
+  type: 'somfy-tahoma', category: 'Geräte', label: 'Somfy Tahoma', color: '#f97316',
   description: 'Lokale TaHoma-API (Developer Mode). Geräte-ID = vollständige deviceURL; alternativ eindeutiger Gerätename. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Toggle und Trigger reagieren auf jedes 0/1-Telegramm. Rückmeldungen nur soweit vom Gerät unterstützt.',
   inputs: [
     { handle: 'ip', label: 'IP Adresse' },

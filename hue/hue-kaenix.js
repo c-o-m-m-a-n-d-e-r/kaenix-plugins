@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.9
+ * @version   1.0.10
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -366,7 +366,7 @@ module.exports = {
   category:    'Geräte',
   label:       'Philips Hue',
   description: 'Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1). Unterstützt Ein/Aus, Helligkeit, Sättigung, Farbtemperatur, RGB, HSV und Szenen.',
-  color:       '#FFD700',
+  color:       '#f97316',
 
   inputs: [
     { handle: 'onOff',         label: 'Ein/Aus (0/1)' },

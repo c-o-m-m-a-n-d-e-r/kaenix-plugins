@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.16
+ * @version   1.0.17
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -866,7 +866,7 @@ module.exports = {
                'über die lokale UPnP/SOAP HTTP-Schnittstelle. Unterstützt Play, Pause, Stop, Next/Prev, ' +
                'Lautstärke (absolut, relativ, KNX 4-Bit DPT 3.007 Dimmer), Mute, Favoriten/Presets, ' +
                'Shuffle, Repeat, Direkt-URI und Status-Polling.',
-  color:       '#D97706',
+  color:       '#f97316',
 
   inputs: [
     { handle: 'mediaFavorite', label: 'Favorit aus Musik-Widget (DPT28.001)' },

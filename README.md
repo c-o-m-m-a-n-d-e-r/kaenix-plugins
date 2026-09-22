@@ -54,7 +54,7 @@ Gruppenname im "Node hinzufügen"-Panel, z.B. `'Automatisierung'`, `'Mathematik'
 `description` ist nur in der Detailansicht sichtbar (nicht auf der Node selbst).
 
 ### `color` _(CSS Hex-Farbe)_
-Header-Farbe der Node, z.B. `'#f59e0b'`.
+Header-Farbe der Node, z.B. `'#f59e0b'`. Plugins der Kategorie `Geräte` verwenden einheitlich Orange (`#f97316`).
 
 ### `inputs` / `outputs`
 Arrays von Handle-Definitionen:
@@ -533,7 +533,7 @@ Byte `0x00` = Stopp-Telegramm (wird ignoriert).
 
 ### Somfy Tahoma – lokale Steuerung
 
-`somfy-tahoma/somfy-tahoma-kaenix.js`, Version **1.0.0**. Benötigt eine
+`somfy-tahoma/somfy-tahoma-kaenix.js`, Version **1.0.1**. Benötigt eine
 TaHoma-Box mit aktiviertem [Developer Mode und lokalem Token](https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode).
 Die Kommunikation erfolgt ausschließlich über die lokale HTTPS-API auf Port 8443.
 
@@ -579,7 +579,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.0**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.1**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -633,7 +633,7 @@ Batteriemessungen mit möglicher Jog-Bewegung werden nicht automatisch ausgelös
 
 ### WLED – LED-Steuerung
 
-`wled/wled-kaenix.js`, Version **1.0.0**. Nutzt die lokale
+`wled/wled-kaenix.js`, Version **1.0.1**. Nutzt die lokale
 [WLED-JSON-API](https://kno.wled.ge/interfaces/json-api/) über HTTP, ohne zusätzliche
 Bibliotheken. IP und Port (Standard 80) sind global speicherbar und pro Node oder
 Eingang überschreibbar. Segment-ID standardmäßig 0.

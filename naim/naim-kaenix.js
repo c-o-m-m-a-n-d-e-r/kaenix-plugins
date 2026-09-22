@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.9
+ * @version   1.0.10
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -734,7 +734,7 @@ module.exports = {
   description: 'Steuert Naim Audio Streaming-Geräte (Mu-so, Mu-so Qb, Uniti Atom/Star/Nova, ND5 XS 2, NDX 2, ND 555, NSC 222 etc.) über die Naim HTTP/REST-API. ' +
                'Unterstützt Power, Play/Pause, Stop, Next/Prev, Lautstärke (absolut, relativ, KNX 4-Bit DPT 3.007 Dimmer), ' +
                'Mute, Quellenwahl, Presets, Shuffle, Repeat und Status-Polling.',
-  color:       '#009E49',
+  color:       '#f97316',
 
   inputs: [
     { handle: 'mediaFavorite', label: 'Favorit aus Musik-Widget (DPT28.001)' },

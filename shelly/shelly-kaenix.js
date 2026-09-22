@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -436,7 +436,7 @@ module.exports = {
   category:    'Geräte',
   label:       'Shelly',
   description: 'Steuert Shelly-Geräte Gen 1–4. Unterstützt Relays, Dimmer, RGBW, Jalousien und Sensoren. Gen 1 nutzt die REST-API, Gen 2/3/4 die RPC-API mit Digest-Auth.',
-  color:       '#e67e22',
+  color:       '#f97316',
 
   inputs: [
     { handle: 'onOff',         label: 'Ein/Aus (0/1)' },

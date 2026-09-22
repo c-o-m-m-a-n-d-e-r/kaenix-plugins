@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -204,7 +204,7 @@ function dispose(s) {
   for (const req of s.requests) req.destroy();
 }
 module.exports = {
-  type: 'powerview', category: 'Geräte', label: 'PowerView', color: '#466b83',
+  type: 'powerview', category: 'Geräte', label: 'PowerView', color: '#f97316',
   description: 'Lokale PowerView-Steuerung Gen 1/2/3. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Öffnen/Schliessen/Stop/Status nur bei 1. Geräte-ID hat Vorrang. Fährt nur bei expliziter Rückmeldung oder aktivierter Laufzeitschätzung; Stop nicht bei Gen 1.',
   inputs: [
     { handle: 'ip', label: 'IP Adresse' }, { handle: 'port', label: 'Port (Standard 80)' },

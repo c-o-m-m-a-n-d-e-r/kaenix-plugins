@@ -1,6 +1,6 @@
 /**
  * @plugin    WLED
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * API: https://kno.wled.ge/interfaces/json-api/
@@ -157,7 +157,7 @@ const controls = [
   ['intensity','Effektintensität (0–100 %)'], ['palette','Farbpalette (ID oder Name)'], ['preset','Preset (ID oder Name)'],
 ];
 module.exports = {
-  type: 'wled', category: 'Geräte', label: 'WLED', color: '#f4b400',
+  type: 'wled', category: 'Geräte', label: 'WLED', color: '#f97316',
   description: 'Lokale WLED-JSON-API. Schalten/Helligkeit gelten für das Gerät, Farben und Effekte für die gewählte Segment-ID (Standard 0). Toggle bei jedem 0/1-Telegramm. Status-Trigger nur bei 1. IP/Port können global gespeichert werden.',
   inputs: [
     {handle:'ip',label:'IP Adresse'}, {handle:'port',label:'Port (Standard 80)'}, {handle:'segment',label:'Segment-ID (Standard 0)'},

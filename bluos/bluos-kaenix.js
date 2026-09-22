@@ -1,6 +1,6 @@
 /**
  * @plugin    BluOS Player
- * @version   1.0.8
+ * @version   1.0.9
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -586,7 +586,7 @@ module.exports = {
   description: 'Steuert BluOS-fähige Audioplayer (Bluesound, NAD, DALI etc.) über die BluOS HTTP-API. ' +
                'Unterstützt Play/Pause, Stop, Next/Prev, Lautstärke (absolut, relativ, KNX 4-Bit DPT 3.007 Dimmer), ' +
                'Mute, Presets, Shuffle, Repeat und Status-Long-Polling.',
-  color:       '#0070BA',
+  color:       '#f97316',
 
   inputs: [
     { handle: 'mediaFavorite', label: 'Favorit aus Musik-Widget (DPT28.001)' },
