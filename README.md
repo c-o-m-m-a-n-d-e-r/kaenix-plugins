@@ -720,7 +720,7 @@ knx-user-forum e.V.; siehe Plugin-Kopf.
 
 ### Gardena – smart system API v2
 
-`gardena/gardena-kaenix.js`, Version **1.0.1**, Kategorie Geräte (orange).
+`gardena/gardena-kaenix.js`, Version **1.0.2**, Kategorie Geräte (orange).
 Basiert funktional auf `gardena.py` / Logik 12980 v1.9995; verwendet ausschließlich
 OAuth2 und die öffentliche Gardena smart system API v2, keine privaten App-Endpunkte.
 Benötigt Internet, ein eingerichtetes Gardena smart system und die im kaenix-Server
@@ -791,3 +791,9 @@ knx-user-forum e.V., siehe Plugin-Kopf.
 
 Gardena ab 1.0.1: HTTP-Fehler nennen den betroffenen API-Schritt und die
 Fehlermeldung aus der JSON-Antwort. Zugangsdaten und Tokens werden ausgeblendet.
+
+Gardena ab 1.0.2: Die Standort-ID wird gegen die Gärten des Kontos geprüft.
+Leere Werte und 0 am Standort-Eingang verwenden die Node-/globale Einstellung
+bzw. wählen bei genau einem Garten automatisch dessen ID. Ungültige IDs oder
+mehrere Gärten ohne Auswahl melden die verfügbaren Standort-IDs in der Diagnose.
+Geräte-ID und Standort-ID sind unterschiedliche Werte.

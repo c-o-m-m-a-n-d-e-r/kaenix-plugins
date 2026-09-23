@@ -1,6 +1,6 @@
 /**
  * @plugin Gardena
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  * Functional adaptation of Gardena smart logic 12980 v1.9995 (gardena.py).
@@ -180,6 +180,23 @@ function retry(a,error) {
   const seconds=Math.max(Math.min(300,10*2**Math.min(a.failures++,5)),error?.retryAfter||0);
   a.retryTimer=setTimeout(()=>connect(a),Math.min(seconds,86400)*1000);a.retryTimer.unref?.();
 }
+function locationSetting(value) {
+  // Unconnected text inputs can be restored as numeric/string zero by the editor.
+  if(value==null || value===false)return '';
+  const text=String(value).trim();
+  return text==='0' ? '' : text;
+}
+function selectLocation(data,configured) {
+  if(!Array.isArray(data))throw new Error('Ungültige Standortliste von Gardena');
+  const locations=data.filter(item=>typeof item?.id==='string' && item.id.trim());
+  if(!locations.length)throw new Error('Keine Gärten für diese Entwickler-Anwendung gefunden');
+  const wanted=locationSetting(configured);
+  const match=locations.find(item=>item.id===wanted);
+  if(match)return match.id;
+  if(!wanted && locations.length===1)return locations[0].id;
+  const choices=locations.map(item=>`${typeof item.attributes?.name==='string' ? item.attributes.name : 'Garten'}: ${item.id}`).join('; ');
+  throw new Error(`${wanted ? 'Konfigurierte Standort-ID gehört nicht zu diesem Konto' : 'Mehrere Gärten vorhanden – Standort-ID wählen'}. Verfügbare Standorte: ${choices}`);
+}
 async function connect(a) {
   if(a.disposed || a.connecting)return;
   a.connecting=true;clearTimeout(a.retryTimer);cleanupConnection(a);
@@ -188,11 +205,9 @@ async function connect(a) {
     if(a.disposed)return;
     if(!token.access_token || !(Number(token.expires_in)>0))throw new Error('Token-Antwort ungültig');
     a.token=token.access_token;
-    if(!a.location) {
-      const locations=await request(a,`${API}/locations`);
-      if(!Array.isArray(locations.data) || locations.data.length!==1)throw new Error('Standort-ID konfigurieren (kein oder mehrere Gärten gefunden)');
-      a.location=locations.data[0].id;
-    }
+    const locations=await request(a,`${API}/locations`);
+    if(a.disposed)return;
+    a.location=selectLocation(locations.data,a.configuredLocation);
     await snapshot(a);
     const response=await request(a,`${API}/websocket`,'POST',{data:{id:crypto.randomUUID(),type:'WEBSOCKET',attributes:{locationId:a.location}}});
     if(a.disposed)return;
@@ -333,6 +348,7 @@ module.exports={
     const stored={...previous,...inputs};
     const pick=(key,fallback)=>[stored[key],data[key],context.globalSetting?.(key),fallback].find(v=>v!==undefined && v!==null && v!=='');
     const cfg=Object.fromEntries(['clientId','clientSecret','deviceId','locationId'].map(k=>[k,String(pick(k,'')).trim()]));
+    cfg.locationId=[stored.locationId,data.locationId,context.globalSetting?.('locationId')].map(locationSetting).find(Boolean)||'';
     if(!s || JSON.stringify(cfg)!==JSON.stringify(s.cfg)) {
       if(s)detach(s);
       s={cfg,context,stored,inputs:{},outputs:{},disposed:false,pendingStart:false};nodes.set(id,s);
@@ -340,7 +356,7 @@ module.exports={
         const accountId=crypto.createHash('sha256').update(JSON.stringify([cfg.clientId,cfg.clientSecret,cfg.locationId])).digest('hex');
         let a=accounts.get(accountId);
         if(!a) {
-          a={id:accountId,key:cfg.clientId,secret:cfg.clientSecret,location:cfg.locationId,nodes:new Set(),resources:new Map(),requests:new Set(),queue:Promise.resolve(),failures:0,online:false,disposed:false};
+          a={id:accountId,key:cfg.clientId,secret:cfg.clientSecret,configuredLocation:cfg.locationId,location:cfg.locationId,nodes:new Set(),resources:new Map(),requests:new Set(),queue:Promise.resolve(),failures:0,online:false,disposed:false};
           accounts.set(accountId,a);
         }
         s.account=a;a.nodes.add(s);
