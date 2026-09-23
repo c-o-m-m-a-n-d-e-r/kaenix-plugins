@@ -692,7 +692,7 @@ Batteriemessungen mit möglicher Jog-Bewegung werden nicht automatisch ausgelös
 
 ### WLED – LED-Steuerung
 
-`wled/wled-kaenix.js`, Version **1.0.1**. Nutzt die lokale
+`wled/wled-kaenix.js`, Version **1.0.2**. Nutzt die lokale
 [WLED-JSON-API](https://kno.wled.ge/interfaces/json-api/) über HTTP, ohne zusätzliche
 Bibliotheken. IP und Port (Standard 80) sind global speicherbar und pro Node oder
 Eingang überschreibbar. Segment-ID standardmäßig 0.
@@ -711,7 +711,9 @@ Effektgeschwindigkeit, Effektintensität, Farbpalette-ID, Preset-ID.
   aus, Werte über 0 schalten ein. Bei ausgeschaltetem Gerät ist die Rückmeldung 0 %.
 - Farben, Segment Ein/Aus, Farbtemperatur und Effekte betreffen ausschließlich
   das konfigurierte, bereits vorhandene Segment. Die Node erstellt keine Segmente.
-- RGB nimmt einen gepackten RGB-Wert (DPT232.600) oder `#RRGGBB` entgegen.
+- RGB nimmt ein DPT232.600-Objekt `{red, green, blue}` (je 0–255), einen
+  gepackten RGB-Zahlenwert oder `#RRGGBB` entgegen. Der RGB-Ausgang liefert
+  das DPT232.600-Objekt direkt für KNX; unveränderte Farben werden nicht erneut gesendet.
   Einzelkanäle, Helligkeit, Geschwindigkeit und Intensität verwenden 0–100 %.
   Änderungen einzelner Farbkanäle erhalten die anderen Kanäle der Primärfarbe.
 - Weiß und Farbtemperatur benötigen geeignete LEDs und WLED-Konfiguration.

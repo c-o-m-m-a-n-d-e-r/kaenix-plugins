@@ -1,6 +1,6 @@
 /**
  * @plugin    WLED
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * API: https://kno.wled.ge/interfaces/json-api/
@@ -21,8 +21,9 @@ function required(v, min, max, integer = false) {
 }
 const byte = v => Math.round(required(v, 0, 100) * 255 / 100);
 function emit(s, handle, value) {
-  if (!s.disposed && value !== undefined && s.outputs[handle] !== value) {
-    s.outputs[handle] = value; s.context.emitOutput(handle, value);
+  const comparable = value !== null && typeof value === 'object' ? JSON.stringify(value) : value;
+  if (!s.disposed && value !== undefined && s.outputs[handle] !== comparable) {
+    s.outputs[handle] = comparable; s.context.emitOutput(handle, value);
   }
 }
 function connected(s, value) {
@@ -80,7 +81,7 @@ function report(s, state) {
       if (number(col[i], 0, 255) !== undefined) emit(s, handle, Math.round(col[i] / 255 * 100));
     });
     if (col.length >= 3 && col.slice(0,3).every(v => number(v,0,255,true) !== undefined)) {
-      emit(s, 'rgb', col[0] * 65536 + col[1] * 256 + col[2]);
+      emit(s, 'rgb', { red: Number(col[0]), green: Number(col[1]), blue: Number(col[2]) });
     }
   }
 }
@@ -117,10 +118,16 @@ async function command(s, handle, value) {
       if (!Array.isArray(col) || col.length < 3 || col.some(v => number(v,0,255,true) === undefined)) throw new Error('Keine gültige RGB-Farbrückmeldung');
       const color = col.slice(0,4);
       if (handle === 'rgb') {
-        let rgb;
-        if (typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value.trim())) rgb = parseInt(value.trim().slice(1),16);
-        else rgb = required(value,0,0xffffff,true);
-        color[0] = (rgb >> 16) & 255; color[1] = (rgb >> 8) & 255; color[2] = rgb & 255;
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          ['red', 'green', 'blue'].forEach((channel, i) => {
+            color[i] = required(value[channel], 0, 255, true);
+          });
+        } else {
+          let rgb;
+          if (typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value.trim())) rgb = parseInt(value.trim().slice(1),16);
+          else rgb = required(value,0,0xffffff,true);
+          color[0] = (rgb >> 16) & 255; color[1] = (rgb >> 8) & 255; color[2] = rgb & 255;
+        }
       } else color[['red','green','blue','white'].indexOf(handle)] = byte(value);
       seg.col = [color];
     } else if (handle === 'effect') seg.fx = await selectId(s, value, 'effect');
