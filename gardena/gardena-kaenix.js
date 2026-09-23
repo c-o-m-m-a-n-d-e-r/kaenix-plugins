@@ -1,6 +1,6 @@
 /**
  * @plugin Gardena
- * @version 1.0.0
+ * @version 1.0.1
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  * Functional adaptation of Gardena smart logic 12980 v1.9995 (gardena.py).
@@ -43,6 +43,34 @@ function offline(a) {
     if(bit(s.inputs.safety)!==0) openDoor(s);
   }
 }
+function requestPhase(url,auth) {
+  if(auth)return 'Anmeldung';
+  const pathname=new URL(url).pathname;
+  if(pathname.endsWith('/websocket'))return 'WebSocket-Anmeldung';
+  if(pathname.includes('/command/'))return 'Gerätebefehl';
+  return pathname.endsWith('/locations') ? 'Standorte laden' : 'Geräte laden (Standort-ID prüfen)';
+}
+function responseError(a,url,auth,status,raw) {
+  let json;
+  try {json=JSON.parse(raw);}catch {json={};}
+  const errors=Array.isArray(json?.errors)?json.errors.slice(0,3):[];
+  const parts=[json?.error,json?.error_description,json?.message,...errors.flatMap(e=>[e?.code,e?.title,e?.detail])]
+    .filter(v=>typeof v==='string' && v.trim());
+  let detail=[...new Set(parts)].join(' – ');
+  // Only selected error fields are logged; never dump bodies, credentials or URLs.
+  const basic=Buffer.from(`${a.key}:${a.secret}`).toString('base64');
+  const sensitive=[a.key,a.secret,a.token,basic].filter(Boolean).flatMap(v=>[v,encodeURIComponent(v),new URLSearchParams({v}).toString().slice(2)]);
+  for(const value of sensitive.sort((x,y)=>y.length-x.length))detail=detail.split(value).join('[entfernt]');
+  detail=detail.replace(/(?:https?|wss):\/\/[^\s]+/gi,'[URL entfernt]')
+    .replace(/\b(?:Bearer|Basic)\s+[^\s,;]+/gi,'[Authentifizierung entfernt]')
+    .replace(/[\r\n\t]+/g,' ').slice(0,500);
+  const hint=auth && ['invalid_client','unauthorized_client'].includes(json?.error)
+    ? ' – Application Key und Application Secret der Entwickler-Anwendung prüfen (kein Konto-Passwort)'
+    : status===403 ? ' – API-Freigabe der Entwickler-Anwendung prüfen' : '';
+  const error=new Error(`${requestPhase(url,auth)}: HTTP ${status}${detail ? ` – ${detail}` : ''}${hint}`);
+  error.status=status;
+  return error;
+}
 function request(a,url,method='GET',body,auth=false) {
   return new Promise((resolve,reject)=>{
     if(a.disposed) return reject(new Error('Verbindung beendet'));
@@ -57,8 +85,7 @@ function request(a,url,method='GET',body,auth=false) {
       res.on('data',chunk=>{raw+=chunk;if(raw.length>4*1024*1024)req.destroy(new Error('Antwort zu groß'));});
       res.on('end',()=>{
         if(res.statusCode<200 || res.statusCode>=300) {
-          const e=new Error(`HTTP ${res.statusCode}${res.statusCode===403 ? ' – API-Freigabe prüfen' : ''}`);
-          e.status=res.statusCode;
+          const e=responseError(a,url,auth,res.statusCode,raw);
           e.retryAfter=Math.max(0,Number(res.headers['retry-after'])||0);
           return reject(e);
         }

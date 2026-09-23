@@ -720,7 +720,7 @@ knx-user-forum e.V.; siehe Plugin-Kopf.
 
 ### Gardena – smart system API v2
 
-`gardena/gardena-kaenix.js`, Version **1.0.0**, Kategorie Geräte (orange).
+`gardena/gardena-kaenix.js`, Version **1.0.1**, Kategorie Geräte (orange).
 Basiert funktional auf `gardena.py` / Logik 12980 v1.9995; verwendet ausschließlich
 OAuth2 und die öffentliche Gardena smart system API v2, keine privaten App-Endpunkte.
 Benötigt Internet, ein eingerichtetes Gardena smart system und die im kaenix-Server
@@ -788,3 +788,6 @@ API-Referenzen: [Developer Portal](https://developer.husqvarnagroup.cloud/apis/G
 [py-smart-gardena](https://github.com/py-smart-gardena/py-smart-gardena).
 Lizenz entsprechend der Vorlage: GPL-3.0-or-later; ursprünglicher Copyright-Hinweis
 knx-user-forum e.V., siehe Plugin-Kopf.
+
+Gardena ab 1.0.1: HTTP-Fehler nennen den betroffenen API-Schritt und die
+Fehlermeldung aus der JSON-Antwort. Zugangsdaten und Tokens werden ausgeblendet.
