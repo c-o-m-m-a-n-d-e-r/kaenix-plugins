@@ -579,7 +579,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.1**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.3**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -611,8 +611,10 @@ Gen 1/2 nutzen `/api`, Gen 3 `/home` mit eigener Befehlsstruktur. Die jeweiligen
 Positionswerte werden in Prozent umgerechnet. Gen 1 unterstützt keinen Stop-Befehl.
 Lamellenbefehle werden anhand des Gerätetyps geprüft; bei Typen, die nur im
 abgesenkten Zustand kippen können, muss der Behang zuvor geschlossen sein.
-Bei mehrteiligen Behängen steuert der Positionseingang nur die primäre Schiene;
-für kombinierte Positionen beider Schienen eine PowerView-Szene verwenden.
+Bei mehrteiligen Behängen steuert der Positionseingang nur die primäre Schiene.
+Öffnen/Schließen und Auf/Ab verwenden dagegen die typspezifischen Endlagen:
+Top-Down/Bottom-Up setzt auch die zweite Schiene, Duolite schließt über die
+sekundäre Schiene. Für andere kombinierte Positionen eine PowerView-Szene verwenden.
 
 **Batterie:** Gen 1/2 liefern einen Spannungswert, der als Prozent-Näherung
 umgerechnet wird. Gen 3 liefert nur Stufen, ausgegeben als 0/20/50/100 %.
@@ -835,3 +837,13 @@ Gardena ab 1.0.3 – Quota-Schutz:
   Serverneustart. Andere Programme mit demselben Application Key werden nicht
   mitgezählt. Deshalb sind diese Schutzmaßnahmen keine Garantie für die
   Einhaltung eines kontoweiten Wochen-/Monatsbudgets. Häufige Neustarts vermeiden.
+
+PowerView ab 1.0.2: Fahrbefehle für mehrteilige Behänge korrigiert; Tilt-Anywhere-
+Behänge erhalten bei Öffnen/Schließen die erforderliche Lamellenposition.
+Duolite-Lamellensteuerung setzt zusätzlich einen geöffneten hinteren Behang voraus.
+Auf/Ab bleibt 0=Auf, 1=Ab; Öffnen/Schließen/Stop reagieren jeweils auf 1.
+
+PowerView ab 1.0.3: Batterie- und Warnungsausgabe überarbeitet: Unterstützung für
+verschachtelte `battery`-Objekte, alternative Feldnamen (`batteryPercentage`,
+`batteryLevel`), `batteryStrength` in allen Generationen sowie Behebung der
+fälschlichen Unterdrückung bei `batteryStatus: 4`.
