@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.10
+ * @version   1.0.11
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -32,9 +32,12 @@ function getState(nodeId) {
       onoff:       false,
       bri:         254,
       gamutType:   null,  // wird aus capabilities der Bridge gelesen
-      lpRunning:   false, // Long-Poll-Loop aktiv
-      lpAbort:     false, // Flag zum Stoppen der Loop
-      lpEtag:      null,  // letzter ETag für If-None-Match
+      statusBusy: false,
+      failures: 0,
+      retryAt: 0,
+      generation: 0,
+      disposed: false,
+      request: null,
     });
   }
   return _states.get(nodeId);
@@ -149,9 +152,7 @@ const ctToPct   = (ct)  => Math.round((ct - 153) * 100 / (500 - 153));
 
 // ── HTTP-Helfer ────────────────────────────────────────────────────────────────
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function httpRequest(ip, port, method, path, body, extraHeaders = {}, timeoutMs = 8000) {
+function httpRequest(ip, port, method, path, body, extraHeaders = {}, timeoutMs = 8000, state = null) {
   return new Promise((resolve, reject) => {
     const bodyStr = body != null ? JSON.stringify(body) : '';
     const headers = { 'Content-Type': 'application/json', 'Connection': 'close', ...extraHeaders };
@@ -161,10 +162,13 @@ function httpRequest(ip, port, method, path, body, extraHeaders = {}, timeoutMs 
       { hostname: ip, port, path, method, headers, timeout: timeoutMs },
       (res) => {
         let raw = '';
+        res.on('error', reject);
+        res.on('aborted', () => reject(new Error('HTTP Antwort abgebrochen')));
         res.on('data', (c) => (raw += c));
         res.on('end',  () => resolve({ status: res.statusCode, body: raw, headers: res.headers }));
       }
     );
+    if (state) state.request = req;
     req.on('error',   reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('HTTP Timeout')); });
     if (bodyStr) req.write(bodyStr);
@@ -181,42 +185,80 @@ function buildEndpoint(apiKey, lightId, groupId) {
 
 // ── Status abrufen & parsen ────────────────────────────────────────────────────
 
+function pollDelay(cfg) {
+  // Historisches „Long-Polling“ ist normales Polling, kein Push-Kanal.
+  return cfg.longPoll ? Math.max(5, cfg.interval || 0) : Math.max(0, cfg.interval);
+}
+
+function scheduleStatus(state) {
+  clearTimeout(state.timer);
+  state.timer = null;
+  const seconds = pollDelay(state.cfg);
+  if (state.disposed || !seconds) return;
+  const delay = Math.max(seconds * 1000, state.retryAt - Date.now());
+  state.timer = setTimeout(() => {
+    state.timer = null;
+    void fetchStatus(state.cfg, state);
+  }, delay);
+  state.timer.unref?.();
+}
+
+function stopStatus(state) {
+  state.generation++;
+  clearTimeout(state.timer);
+  state.timer = null;
+  state.request?.destroy(new Error('Statusabfrage beendet'));
+  state.request = null;
+  state.statusBusy = false;
+}
+
 async function fetchStatus(cfg, state) {
+  if (state.disposed || state.statusBusy || Date.now() < state.retryAt) return;
+  // Nachlaufende Befehle dürfen keine alte Bridge mehr abfragen.
+  if (cfg.ip !== state.cfg.ip || cfg.port !== state.cfg.port || cfg.apiKey !== state.cfg.apiKey
+      || cfg.lightId !== state.cfg.lightId || cfg.groupId !== state.cfg.groupId) return;
+  const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
+  if (!ep) return;
+  clearTimeout(state.timer);
+  state.timer = null;
+  state.statusBusy = true;
+  const generation = state.generation;
   try {
-    const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
-    if (!ep) return;
-
-    const res = await httpRequest(cfg.ip, cfg.port, 'GET', ep.base, null);
-    if (res.status !== 200) {
-      if (state.emit) state.emit('connected', 0);
-      state.setStatus?.(false);
-      return;
-    }
-
+    const res = await httpRequest(cfg.ip, cfg.port, 'GET', ep.base, null, {}, 8000, state);
+    if (state.disposed || generation !== state.generation) return;
+    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
     const data = JSON.parse(res.body);
+    if (!data[ep.mode]) {
+      const error = Array.isArray(data) && data.find(item => item.error)?.error;
+      throw new Error(error ? `Hue API Fehler ${error.type}` : 'Ungültige Statusantwort');
+    }
+    state.failures = 0;
+    state.retryAt = 0;
+    state.lastError = null;
     parseAndEmit(data, ep.mode, state, cfg);
   } catch (e) {
-    if (state.emit) state.emit('connected', 0);
-    state.setStatus?.(false);
-    if (state.warn) state.warn(`Status-Fehler: ${e.message}`);
-  }
-}
-
-function stopLongPoll(state) {
-  state.lpAbort = true;
-  // lpRunning is cleared by the loop itself when it exits
-}
-
-function startLongPoll(cfg, state) {
-  state.lpAbort   = false;
-  state.lpRunning = true;
-  (async () => {
-    while (!state.lpAbort && (state.cfg ?? cfg).longPoll) {
-      await fetchStatus(state.cfg ?? cfg, state);
-      await new Promise((r) => setTimeout(r, 1000));
+    if (state.disposed || generation !== state.generation) return;
+    state.failures++;
+    const retrySeconds = Math.min(300, 10 * 2 ** Math.min(state.failures - 1, 5));
+    state.retryAt = Date.now() + retrySeconds * 1000;
+    if (state.prevEmitted.connected !== 0) {
+      state.prevEmitted.connected = 0;
+      state.emit?.('connected', 0);
     }
-    state.lpRunning = false;
-  })();
+    state.setStatus?.(false);
+    // Gleiche Fehler höchstens alle fünf Minuten melden.
+    if (state.lastError !== e.message || Date.now() - state.lastWarnAt >= 300000) {
+      state.warn?.(`Status-Fehler: ${e.message} (Abfragepause ${retrySeconds} s)`);
+      state.lastError = e.message;
+      state.lastWarnAt = Date.now();
+    }
+  } finally {
+    if (!state.disposed && generation === state.generation) {
+      state.request = null;
+      state.statusBusy = false;
+      scheduleStatus(state);
+    }
+  }
 }
 
 function parseAndEmit(data, mode, state, cfg) {
@@ -430,7 +472,7 @@ module.exports = {
 
     // ── Status-Polling ────────────────────────────────────────────────────────
     { key: 'interval', label: 'Status-Intervall Sek. (leer = deaktiviert)', type: 'number', placeholder: '' },    {
-      key: 'longPoll', label: 'Long-Polling (Sofort-Updates von der Bridge)', type: 'select',
+      key: 'longPoll', label: 'Schnelles Status-Polling (mindestens 5 s)', type: 'select',
       options: [{ value: '0', label: 'Deaktiviert' }, { value: '1', label: 'Aktiviert' }],
     },  ],
 
@@ -460,12 +502,15 @@ module.exports = {
       interval:     parseInt(data.interval, 10) || 0,
       longPoll:     parseInt(data.longPoll,  10) || 0,
     };
-    state.cfg = cfg; // keep ref current for long-poll loop
+    const previousCfg = state.cfg;
+    state.cfg = cfg;
+    const pollingChanged = !previousCfg || pollDelay(previousCfg) !== pollDelay(cfg);
 
     // Pflichtfelder prüfen
-    if (!cfg.ip)     { context.warn('Hue Bridge IP-Adresse nicht konfiguriert'); return {}; }
-    if (!cfg.apiKey) { context.warn('API Key nicht konfiguriert'); return {}; }
+    if (!cfg.ip)     { stopStatus(state); context.warn('Hue Bridge IP-Adresse nicht konfiguriert'); return {}; }
+    if (!cfg.apiKey) { stopStatus(state); context.warn('API Key nicht konfiguriert'); return {}; }
     if (cfg.lightId === 0 && cfg.groupId === 0) {
+      stopStatus(state);
       context.warn('Weder Lampen-ID noch Gruppen-ID konfiguriert');
       return {};
     }
@@ -482,26 +527,22 @@ module.exports = {
       state.lightId     = cfg.lightId;
       state.groupId     = cfg.groupId;
       state.prevEmitted = {};
-      if (state.timer) { clearInterval(state.timer); state.timer = null; }
-      stopLongPoll(state);
+      stopStatus(state);
+      state.failures = 0;
+      state.retryAt = 0;
+      state.lastError = null;
     }
 
-    // Reguläres Status-Polling starten / stoppen
-    if (cfg.interval > 0 && !state.timer) {
-      state.timer = setInterval(() => fetchStatus(cfg, state), cfg.interval * 1000);
-      fetchStatus(cfg, state);
-    } else if (cfg.interval === 0 && state.timer) {
-      clearInterval(state.timer);
+    // Genau ein Polling-Timer; nächste Abfrage erst nach Abschluss der letzten.
+    if (endpointChanged || pollingChanged) {
+      clearTimeout(state.timer);
       state.timer = null;
-    }
-
-    // Long-Polling starten / stoppen
-    if (cfg.longPoll && !state.lpRunning) {
-      // Einmalig sofortigen Status-Abruf machen, bevor die Loop wartet
-      fetchStatus(cfg, state);
-      startLongPoll(cfg, state);
-    } else if (!cfg.longPoll && state.lpRunning) {
-      stopLongPoll(state);
+      if (!state.statusBusy && pollDelay(cfg) > 0) {
+        if (Date.now() >= state.retryAt) void fetchStatus(cfg, state);
+        else scheduleStatus(state);
+      }
+    } else if (!state.statusBusy && !state.timer && pollDelay(cfg) > 0) {
+      scheduleStatus(state);
     }
 
     // ── Eingangsauswertung ────────────────────────────────────────────────────
@@ -571,5 +612,13 @@ module.exports = {
 
     state.prevInputs = { ...inputs };
     return {};
+  },
+  dispose(nodeId) {
+    for (const [id, state] of _states) {
+      if (nodeId != null && id !== nodeId) continue;
+      state.disposed = true;
+      stopStatus(state);
+      _states.delete(id);
+    }
   },
 };

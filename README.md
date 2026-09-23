@@ -500,6 +500,8 @@ Die Gerätegeneraion wird beim ersten Verbindungsaufbau automatisch per `GET /sh
 
 ### Philips Hue – Konfiguration
 
+Version **1.0.11**.
+
 Steuert Philips Hue Lampen und Gruppen über die **Hue Bridge API v1** (HTTP, kein HTTPS erforderlich).  
 Der Status-Punkt im Node-Titel zeigt grün (verbunden) / rot (getrennt) basierend auf dem letzten Status-Abruf.
 
@@ -524,7 +526,23 @@ Der Status-Punkt im Node-Titel zeigt grün (verbunden) / rot (getrennt) basieren
 | `intelliStart` | select | `0` | Intelli Start: Szene beim Einschalten setzen (1 = ja) |
 | `scene` | text | – | Szenen-ID die beim Einschalten gesetzt wird (nur bei Intelli Start) |
 | `startBri` | number | `0` | Starthelligkeit in % beim Einschalten (0 = deaktiviert) |
-| `interval` | number | `0` | Status-Polling-Intervall in Sekunden (0 = deaktiviert) |
+| `interval` | number | `0` | Pause nach abgeschlossener Statusabfrage in Sekunden (0 = deaktiviert, sofern schnelles Polling aus ist) |
+| `longPoll` | select | `0` | Schnelles Status-Polling: mindestens 5 Sekunden Pause; ein größeres Status-Intervall hat Vorrang |
+
+**Statusabfragen ab 1.0.11:** Das bisher „Long-Polling“ genannte Verfahren
+ist regelmäßiges HTTP-Polling, kein Push-Kanal. Beide Polling-Einstellungen
+verwenden jetzt einen gemeinsamen Timer. Pro Node läuft höchstens eine
+Statusabfrage gleichzeitig, auch bei zusätzlichen Triggern oder Schaltbefehlen.
+Intervalländerungen werden übernommen; Entfernen, Deaktivieren oder Neuladen
+beendet Timer und laufende Statusanfragen.
+
+Bei Statusfehlern wachsen die Abfragepausen von 10 über 20, 40, 80 und 160 auf
+maximal 300 Sekunden. Ein größeres konfiguriertes Intervall bleibt maßgeblich.
+Auch Status-Trigger und Abfragen nach Schaltbefehlen beachten die Fehlerpause;
+Schaltbefehle selbst bleiben möglich. Bei deaktiviertem Polling erfolgt keine
+automatische Wiederholung. Identische Statusfehler werden höchstens alle fünf
+Minuten protokolliert. Eine erfolgreiche Abfrage setzt die Fehlerpause zurück
+und meldet die Verbindung wieder als hergestellt.
 
 **Eingänge:**
 
