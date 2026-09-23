@@ -717,3 +717,74 @@ Spannung L1, Spannung L2, Spannung L3.
 Referenz: [Fronius Solar API V1](https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42%2C0410%2C2012.pdf).
 Lizenz entsprechend der Vorlage: GPL-3.0-or-later, ursprünglicher Copyright-Hinweis
 knx-user-forum e.V.; siehe Plugin-Kopf.
+
+### Gardena – smart system API v2
+
+`gardena/gardena-kaenix.js`, Version **1.0.0**, Kategorie Geräte (orange).
+Basiert funktional auf `gardena.py` / Logik 12980 v1.9995; verwendet ausschließlich
+OAuth2 und die öffentliche Gardena smart system API v2, keine privaten App-Endpunkte.
+Benötigt Internet, ein eingerichtetes Gardena smart system und die im kaenix-Server
+bereits vorhandene Bibliothek `ws`.
+
+**Einrichtung:** Im [Husqvarna Developer Portal](https://developer.husqvarnagroup.cloud/)
+mit dem Gardena-Konto eine Anwendung erstellen und Authentication API sowie
+GARDENA smart system API verbinden. Application Key und Application Secret global
+im Plugin hinterlegen; optional pro Node überschreiben. Es wird kein Gardena-
+Loginpasswort benötigt. Bei mehreren Gärten zusätzlich die Standort-ID eintragen.
+Pro Gerät eine Node mit Geräte-ID anlegen. Bei leerer/unbekannter Geräte-ID nennt
+Ausgang „Diagnose / Geräte-IDs“ die verfügbaren Geräte des gewählten Standorts.
+
+**22 Eingänge in Reihenfolge:** Application Key, Application Secret, Geräte-ID,
+Mähen/Parken, Status Trigger, Garagentor benutzen, Torzustand, Sicherheitsschaltung,
+Tor-Öffnungsposition, Regen, Mähdauer (Stunden), Ventil öffnen/schließen,
+Wasserdauer (Minuten), SIC Ventil 1–6, Standort-ID, Torposition beim Mähen,
+Token erneuern.
+
+Die beiden ersten Eingänge ersetzen Login/Passwort. **Eingang 20 ersetzt den alten
+Webserver-Port durch die Standort-ID.** Es wird kein zusätzlicher Webserver geöffnet.
+Die 34 Ausgänge behalten die Reihenfolge der tatsächlichen Ausgangsdefinition der
+Vorlage bei (deren Einleitung nennt nur 28).
+
+- Start, Token-Erneuerung und Wiederverbindung erfolgen automatisch. Nodes mit
+  gleichen Zugangsdaten und gleicher Standort-Konfiguration teilen Token, Cache
+  und WebSocket. Statusänderungen kommen per WebSocket; Status Trigger = 1 lädt
+  den Standort erneut, höchstens einmal innerhalb von zehn Sekunden. Der Trigger
+  erzwingt keine neue physische Sensormessung.
+- Mähen = 1 startet für die Mähdauer (Standard 24 h, maximal 24 h); 0 parkt bis
+  zur nächsten geplanten Aufgabe. Ventil = 1 öffnet für die Wasserdauer
+  (Standard 30 min, maximal 60 min), 0 stoppt bis zur nächsten Aufgabe.
+  SIC 1–6 werden anhand ihrer Service-ID `Geräte-ID:1` bis `:6` zugeordnet.
+  Der einzelne Ventileingang setzt genau einen VALVE-Dienst am Gerät voraus.
+- Regen = 1 parkt bis auf Weiteres und sperrt Mähstarts. Regen = 0 setzt den
+  Zeitplan nur fort, wenn diese Node zuvor die Regenpause ausgelöst hat.
+  Nach einem Neustart werden weder gespeicherte Befehle noch eine Regenfreigabe
+  automatisch ausgeführt; gegebenenfalls einen neuen Mähbefehl senden.
+- Torsteuerung ist optional: 0 % = offen, 100 % = geschlossen. Beim Mähstart
+  wird gegebenenfalls geöffnet und auf die **Rückmeldung 0** gewartet, maximal
+  120 Sekunden. Öffnungsposition -1 bedeutet 0 %. Eine andere Öffnungsposition
+  ersetzt die erforderliche Offen-Rückmeldung nicht. Parken, Regen und
+  Verbindungsabbruch löschen eine ausstehende Startfreigabe.
+- Rückmeldungen „sucht“/„verlässt Station“ öffnen das Tor; „mäht“ setzt die
+  konfigurierte Torposition beim Mähen (Standard 0 %). Park-/Ladezustände schließen
+  es auf 100 %, nur bei bestehender Cloud-Verbindung und Geräte-Funkstatus ONLINE.
+  Mit Sicherheitsschaltung = 1 (Standard) wird bei Cloud-Verbindungsverlust die
+  Öffnungsposition ausgegeben. Die Logik ersetzt keine lokale Torabsicherung.
+- Geräteausgänge stammen aus Rückmeldungen, nicht aus der Annahme eines Befehls.
+  Mäher aktiv = 1 bedeutet Mähen/Suchen/Verlassen der Station. Status Text enthält
+  den API-Aktivitätscode; Betriebsstunden werden in h ausgegeben. Temperatur ist
+  die Umgebungstemperatur, ersatzweise Bodentemperatur, falls nur diese vorliegt.
+  Gerätefehler und API-/Verbindungsdiagnose sind getrennte Ausgänge.
+- Die öffentliche API bietet nicht alle Werte der Vorlage: nächster Start
+  (Datum/Zeit/Rest), reine Mähzeit, Ladezyklen, Kollisionen, manueller Modus,
+  manuelle Minuten und Ventil-Restzeiten bleiben **unbelegt**, nicht künstlich 0.
+  Das vorzeitige Toröffnen vor einem geplanten Start entfällt daher. Vor Nutzung
+  autonomer Mähzeitpläne muss die lokale Torfreigabe anderweitig gewährleistet sein.
+- Verbindungsfehler führen zu Wiederholungen mit zunehmendem Abstand; HTTP 429
+  berücksichtigt Retry-After in Sekunden. Befehle werden bei fehlender Verbindung
+  verworfen und nach einer Wiederverbindung nicht nachgeholt. Entfernen/Deaktivieren
+  beendet die Node; nach Entfernen der letzten Node werden Verbindung und Timer beendet.
+
+API-Referenzen: [Developer Portal](https://developer.husqvarnagroup.cloud/apis/GARDENA+smart+system+API),
+[py-smart-gardena](https://github.com/py-smart-gardena/py-smart-gardena).
+Lizenz entsprechend der Vorlage: GPL-3.0-or-later; ursprünglicher Copyright-Hinweis
+knx-user-forum e.V., siehe Plugin-Kopf.
