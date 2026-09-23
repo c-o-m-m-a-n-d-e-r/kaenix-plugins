@@ -720,7 +720,7 @@ knx-user-forum e.V.; siehe Plugin-Kopf.
 
 ### Gardena – smart system API v2
 
-`gardena/gardena-kaenix.js`, Version **1.0.2**, Kategorie Geräte (orange).
+`gardena/gardena-kaenix.js`, Version **1.0.3**, Kategorie Geräte (orange).
 Basiert funktional auf `gardena.py` / Logik 12980 v1.9995; verwendet ausschließlich
 OAuth2 und die öffentliche Gardena smart system API v2, keine privaten App-Endpunkte.
 Benötigt Internet, ein eingerichtetes Gardena smart system und die im kaenix-Server
@@ -748,7 +748,7 @@ Vorlage bei (deren Einleitung nennt nur 28).
 - Start, Token-Erneuerung und Wiederverbindung erfolgen automatisch. Nodes mit
   gleichen Zugangsdaten und gleicher Standort-Konfiguration teilen Token, Cache
   und WebSocket. Statusänderungen kommen per WebSocket; Status Trigger = 1 lädt
-  den Standort erneut, höchstens einmal innerhalb von zehn Sekunden. Der Trigger
+  den Standort erneut, höchstens einmal pro Stunde (ansonsten aus dem WebSocket-Cache). Der Trigger
   erzwingt keine neue physische Sensormessung.
 - Mähen = 1 startet für die Mähdauer (Standard 24 h, maximal 24 h); 0 parkt bis
   zur nächsten geplanten Aufgabe. Ventil = 1 öffnet für die Wasserdauer
@@ -780,7 +780,7 @@ Vorlage bei (deren Einleitung nennt nur 28).
   Das vorzeitige Toröffnen vor einem geplanten Start entfällt daher. Vor Nutzung
   autonomer Mähzeitpläne muss die lokale Torfreigabe anderweitig gewährleistet sein.
 - Verbindungsfehler führen zu Wiederholungen mit zunehmendem Abstand; HTTP 429
-  berücksichtigt Retry-After in Sekunden. Befehle werden bei fehlender Verbindung
+  berücksichtigt Retry-After in Sekunden oder als HTTP-Datum. Befehle werden bei fehlender Verbindung
   verworfen und nach einer Wiederverbindung nicht nachgeholt. Entfernen/Deaktivieren
   beendet die Node; nach Entfernen der letzten Node werden Verbindung und Timer beendet.
 
@@ -810,3 +810,28 @@ Der Deploy-Job vergibt `pages: write` und `id-token: write` explizit. Ein persö
 Token oder das Secret `KAENIX_RELEASES_TOKEN` wird dafür nicht benötigt. Nach der
 Umstellung einen neuen Lauf dieses Workflows starten; ein Re-run des alten
 „pages build and deployment“-Laufs übernimmt die neue Workflow-Datei nicht.
+
+Gardena ab 1.0.3 – Quota-Schutz:
+
+- Kein zyklisches REST-Polling. Manuelle Statusabfragen und Wiederverbindungs-
+  Snapshots teilen eine einstündige Sperre pro Verbindung, auch bei Fehlern.
+- Gültige Tokens werden wiederverwendet; Erneuerung ohne WebSocket-Neustart.
+  Standortlisten werden bei Wiederverbindungen maximal einmal täglich geladen.
+- Maximal acht HTTP-Anfragen in zehn Sekunden pro Application Key innerhalb
+  dieser Plugin-Instanz, einschließlich Token-Abfragen und aller Standorte.
+  Überzählige Befehle werden mit Diagnose abgelehnt, nicht später nachgeholt.
+- Identische erfolgreiche Befehle an denselben Dienst werden zehn Sekunden
+  unterdrückt. Ein entgegengesetzter Befehl bleibt möglich, solange keine
+  Anfrage-/Quota-Sperre aktiv ist. Die Warteschlange ist auf 32 Aktionen begrenzt.
+- Wiederverbindungen: 30, 60, 120, 240, 300 Sekunden, danach stündlich.
+  Erst eine mindestens fünf Minuten stabile WebSocket-Verbindung setzt den
+  Fehlerzähler zurück. HTTP 400/403 und ungültige Standort-Konfigurationen
+  stoppen automatische Wiederholungen bis zur Korrektur oder manuellem Versuch.
+- HTTP 429: Application-Key-weite Pause von zunächst einer Stunde, bei weiteren
+  429 bis zu 24 Stunden. Längere Retry-After-Vorgaben haben Vorrang. Manuelle
+  Token-Erneuerung ist auf einen Versuch je 15 Minuten begrenzt und umgeht
+  weder Quota-Pause noch eine bereits geplante Wiederverbindung.
+- Die lokalen Quota-Zähler/Sperren gelten bis zum Plugin-Neuladen oder
+  Serverneustart. Andere Programme mit demselben Application Key werden nicht
+  mitgezählt. Deshalb sind diese Schutzmaßnahmen keine Garantie für die
+  Einhaltung eines kontoweiten Wochen-/Monatsbudgets. Häufige Neustarts vermeiden.

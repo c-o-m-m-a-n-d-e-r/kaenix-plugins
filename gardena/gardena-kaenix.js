@@ -1,6 +1,6 @@
 /**
  * @plugin Gardena
- * @version 1.0.2
+ * @version 1.0.3
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  * Functional adaptation of Gardena smart logic 12980 v1.9995 (gardena.py).
@@ -18,6 +18,38 @@ try { WebSocket = require('ws'); }
 catch { WebSocket = require(require.resolve('ws', {paths:[process.cwd()]})); }
 const nodes = new Map(), accounts = new Map();
 const API = 'https://api.smart.gardena.dev/v2';
+const quotas = new Map(); // Application-wide, including different locations; retained until plugin reload.
+const STATUS_INTERVAL = 60 * 60 * 1000;
+function quota(a) {
+  const key=crypto.createHash('sha256').update(a.key).digest('hex');
+  if(!quotas.has(key))quotas.set(key,{requests:[],blockedUntil:0,strikes:0});
+  return quotas.get(key);
+}
+function retrySeconds(value,now=Date.now()) {
+  if(value==null || value==='')return 0;
+  const seconds=Number(value);
+  return Number.isFinite(seconds) ? Math.max(0,seconds) : Math.max(0,(Date.parse(value)-now)/1000)||0;
+}
+function reserveRequest(a) {
+  const q=quota(a),now=Date.now();
+  if(q.blockedUntil>now) {
+    const error=new Error('Quota-Pause aktiv; Anfrage nicht gesendet');
+    error.retryAfter=(q.blockedUntil-now)/1000;error.localLimit=true;throw error;
+  }
+  q.requests=q.requests.filter(at=>now-at<10000);
+  // Keep headroom below the API's short-term limit; count authentication conservatively too.
+  if(q.requests.length>=8) {
+    const error=new Error('Lokales Anfragelimit erreicht; Anfrage nicht gesendet');
+    error.retryAfter=(10000-(now-q.requests[0]))/1000;error.localLimit=true;throw error;
+  }
+  q.requests.push(now);
+}
+function recordRateLimit(a,seconds) {
+  const q=quota(a);
+  const pause=Math.max(seconds,Math.min(86400,3600*2**Math.min(q.strikes++,5)));
+  q.blockedUntil=Math.max(q.blockedUntil,Date.now()+pause*1000);
+  return (q.blockedUntil-Date.now())/1000;
+}
 const AUTH = 'https://api.authentication.husqvarnagroup.dev/v1/oauth2/token';
 const bit = v => [1,'1',true].includes(v) ? 1 : [0,'0',false].includes(v) ? 0 : undefined;
 const attr = (r,k) => r?.attributes?.[k]?.value;
@@ -74,6 +106,7 @@ function responseError(a,url,auth,status,raw) {
 function request(a,url,method='GET',body,auth=false) {
   return new Promise((resolve,reject)=>{
     if(a.disposed) return reject(new Error('Verbindung beendet'));
+    try {reserveRequest(a);}catch(error){return reject(error);}
     const payload=body===undefined ? undefined : auth ? body : JSON.stringify(body);
     const headers=auth ? {'Content-Type':'application/x-www-form-urlencoded'} : {
       Authorization:`Bearer ${a.token}`, 'Authorization-Provider':'husqvarna', 'X-Api-Key':a.key,
@@ -86,7 +119,8 @@ function request(a,url,method='GET',body,auth=false) {
       res.on('end',()=>{
         if(res.statusCode<200 || res.statusCode>=300) {
           const e=responseError(a,url,auth,res.statusCode,raw);
-          e.retryAfter=Math.max(0,Number(res.headers['retry-after'])||0);
+          e.retryAfter=retrySeconds(res.headers['retry-after']);
+          if(e.status===429)e.retryAfter=recordRateLimit(a,e.retryAfter);
           return reject(e);
         }
         try {resolve(raw ? JSON.parse(raw) : {});}catch {reject(new Error('Ungültige JSON-Antwort'));}
@@ -159,6 +193,10 @@ function ingest(a,resources,replace=false) {
 }
 async function snapshot(a) {
   if(a.snapshotPromise) return a.snapshotPromise;
+  if(a.lastSnapshotAttempt!=null && Date.now()-a.lastSnapshotAttempt<STATUS_INTERVAL) {
+    for(const s of a.nodes)report(s);return;
+  }
+  a.lastSnapshotAttempt=Date.now();
   a.snapshotPromise=(async()=>{
     const data=await request(a,`${API}/locations/${encodeURIComponent(a.location)}`);
     if(a.disposed)return;
@@ -168,17 +206,23 @@ async function snapshot(a) {
   return a.snapshotPromise;
 }
 function cleanupConnection(a) {
-  clearTimeout(a.renewTimer);clearInterval(a.heartbeat);
+  clearInterval(a.heartbeat);
   const ws=a.ws;a.ws=null;
   if(ws) {ws.removeAllListeners();ws.on('error',()=>{});ws.terminate();}
 }
 function retry(a,error) {
   if(a.disposed)return;
-  cleanupConnection(a);offline(a);
+  clearTimeout(a.renewTimer);a.renewTimer=null;cleanupConnection(a);offline(a);
   if(error)for(const s of a.nodes)fault(s,error.message);
   clearTimeout(a.retryTimer);
-  const seconds=Math.max(Math.min(300,10*2**Math.min(a.failures++,5)),error?.retryAfter||0);
-  a.retryTimer=setTimeout(()=>connect(a),Math.min(seconds,86400)*1000);a.retryTimer.unref?.();
+  if(error?.status===401) {a.token=null;a.tokenExpires=0;}
+  if([400,403].includes(error?.status) || error?.configuration) {
+    a.halted=true;return; // Invalid configuration cannot be repaired by polling.
+  }
+  const delay=a.failures<5 ? Math.min(300,30*2**a.failures) : 3600;
+  a.failures++;
+  const seconds=Math.max(delay,error?.retryAfter||0,(quota(a).blockedUntil-Date.now())/1000);
+  a.retryTimer=setTimeout(()=>{a.retryTimer=null;connect(a);},Math.min(seconds*1000,2147483647));a.retryTimer.unref?.();
 }
 function locationSetting(value) {
   // Unconnected text inputs can be restored as numeric/string zero by the editor.
@@ -197,17 +241,42 @@ function selectLocation(data,configured) {
   const choices=locations.map(item=>`${typeof item.attributes?.name==='string' ? item.attributes.name : 'Garten'}: ${item.id}`).join('; ');
   throw new Error(`${wanted ? 'Konfigurierte Standort-ID gehört nicht zu diesem Konto' : 'Mehrere Gärten vorhanden – Standort-ID wählen'}. Verfügbare Standorte: ${choices}`);
 }
-async function connect(a) {
-  if(a.disposed || a.connecting)return;
-  a.connecting=true;clearTimeout(a.retryTimer);cleanupConnection(a);
-  try {
+function scheduleTokenRenewal(a) {
+  clearTimeout(a.renewTimer);
+  a.renewTimer=setTimeout(()=>{
+    if(a.disposed)return;
+    a.tokenExpires=0;
+    ensureToken(a).catch(error=>retry(a,error));
+  },Math.max(1000,Math.min(a.tokenExpires-Date.now()-60000,2147483647)));
+  a.renewTimer.unref?.();
+}
+async function ensureToken(a) {
+  if(a.disposed)return;
+  if(a.token && a.tokenExpires-Date.now()>60000){if(!a.renewTimer)scheduleTokenRenewal(a);return;}
+  if(a.tokenPromise)return a.tokenPromise;
+  a.tokenPromise=(async()=>{
     const token=await request(a,AUTH,'POST',new URLSearchParams({grant_type:'client_credentials',client_id:a.key,client_secret:a.secret}).toString(),true);
     if(a.disposed)return;
-    if(!token.access_token || !(Number(token.expires_in)>0))throw new Error('Token-Antwort ungültig');
-    a.token=token.access_token;
-    const locations=await request(a,`${API}/locations`);
+    if(!token.access_token || !(Number(token.expires_in)>60))throw new Error('Token-Antwort ungültig');
+    a.token=token.access_token;a.tokenExpires=Date.now()+Number(token.expires_in)*1000;
+    scheduleTokenRenewal(a);
+  })().finally(()=>{a.tokenPromise=null;});
+  return a.tokenPromise;
+}
+async function connect(a) {
+  if(a.disposed || a.connecting || a.halted)return;
+  if(quota(a).blockedUntil>Date.now()){retry(a);return;}
+  a.connecting=true;clearTimeout(a.retryTimer);cleanupConnection(a);
+  try {
+    await ensureToken(a);
     if(a.disposed)return;
-    a.location=selectLocation(locations.data,a.configuredLocation);
+    if(!a.locationValidatedAt || Date.now()-a.locationValidatedAt>=86400000) {
+      const locations=await request(a,`${API}/locations`);
+      if(a.disposed)return;
+      try {a.location=selectLocation(locations.data,a.configuredLocation);}
+      catch(error){error.configuration=true;throw error;}
+      a.locationValidatedAt=Date.now();
+    }
     await snapshot(a);
     const response=await request(a,`${API}/websocket`,'POST',{data:{id:crypto.randomUUID(),type:'WEBSOCKET',attributes:{locationId:a.location}}});
     if(a.disposed)return;
@@ -216,7 +285,7 @@ async function connect(a) {
     const ws=new WebSocket(url,{handshakeTimeout:15000,maxPayload:4*1024*1024});a.ws=ws;
     ws.on('open',()=>{
       if(a.disposed || a.ws!==ws)return;
-      a.online=true;a.failures=0;a.alive=true;
+      a.online=true;a.alive=true;a.openedAt=Date.now();
       for(const s of a.nodes) {emit(s,'debug','Verbunden (Gardena API v2)');report(s);}
       a.heartbeat=setInterval(()=>{
         if(!a.alive)return ws.terminate();
@@ -230,9 +299,11 @@ async function connect(a) {
       catch {for(const s of a.nodes)emit(s,'debug','Ungültiges WebSocket-Ereignis');}
     });
     ws.on('error',()=>{ /* close schedules a reconnect; never log signed WebSocket URLs */ });
-    ws.on('close',()=>{if(a.ws===ws)retry(a,new Error('WebSocket getrennt'));});
-    a.renewTimer=setTimeout(()=>{offline(a);connect(a);},Math.max(1,Number(token.expires_in)-60)*1000);
-    a.renewTimer.unref?.();
+    ws.on('close',()=>{if(a.ws===ws){
+      if(Date.now()-a.openedAt>=300000)a.failures=0;
+      retry(a,new Error('WebSocket getrennt'));
+    }});
+
   } catch(error) {retry(a,error);} finally {a.connecting=false;}
 }
 async function send(s,type,command,seconds,channel) {
@@ -242,7 +313,13 @@ async function send(s,type,command,seconds,channel) {
   const service=channel ? candidates.find(r=>String(r.id).endsWith(`:${channel}`)) : candidates.length===1 ? candidates[0] : null;
   if(!service)throw new Error(`${type}${channel ? ` ${channel}` : ''}: Dienst fehlt oder ist nicht eindeutig`);
   const attributes={command};if(seconds!==undefined)attributes.seconds=seconds;
+  const fingerprint=JSON.stringify(attributes);
+  const previous=a.lastCommands?.get(service.id);
+  if(previous?.fingerprint===fingerprint && Date.now()-previous.at<10000) {emit(s,'debug','Doppelter Befehl innerhalb von 10 Sekunden unterdrückt');return;}
+  await ensureToken(a);
   await request(a,`${API}/command/${encodeURIComponent(service.id)}`,'PUT',{data:{id:crypto.randomUUID(),type:`${type}_CONTROL`,attributes}});
+  if(!a.lastCommands)a.lastCommands=new Map();
+  a.lastCommands.set(service.id,{fingerprint,at:Date.now()});
   emit(s,'debug','Befehl angenommen; warte auf Geräterückmeldung');
 }
 function duration(value,scale,max) {
@@ -255,10 +332,21 @@ async function action(s,handle,value) {
     if(bit(value)!==1)return;
     if(!s.account.online)throw new Error('Nicht verbunden');
     // Avoid flooding the cloud when several nodes receive the same trigger.
-    if(Date.now()-s.account.lastSnapshot>=10000)await snapshot(s.account);else report(s);
+    await ensureToken(s.account);await snapshot(s.account);
     return;
   }
-  if(handle==='refreshToken') {if(bit(value)===1){offline(s.account);await connect(s.account);}return;}
+  if(handle==='refreshToken') {
+    const a=s.account;
+    if(bit(value)!==1)return;
+    if(quota(a).blockedUntil>Date.now() || (a.lastManualRefresh!=null && Date.now()-a.lastManualRefresh<900000)) {
+      emit(s,'debug','Token-Erneuerung durch Quota-Pause oder 15-Minuten-Sperre begrenzt');return;
+    }
+    a.lastManualRefresh=Date.now();a.halted=false;
+    if(a.retryTimer){emit(s,'debug','Wiederverbindung wartet bereits; kein zusätzlicher Versuch');return;}
+    a.tokenExpires=0;
+    if(a.online)await ensureToken(a);else await connect(a);
+    return;
+  }
   if(handle==='doorState') {
     if(s.pendingStart && Number(value)===0) {
       const resume=s.pendingResume;cancelStart(s);
@@ -293,6 +381,8 @@ function enqueue(s,handle,value) {
   // Commands are accepted only during a live session; never replay after reconnect.
   const a=s.account;
   if(!a.online && handle!=='refreshToken') {fault(s,'Nicht verbunden – Befehl verworfen');return;}
+  if((a.pendingActions||0)>=32){fault(s,'Befehlswarteschlange voll – Befehl verworfen');return;}
+  a.pendingActions=(a.pendingActions||0)+1;
   const connection=a.ws;
   a.queue=a.queue.then(async()=>{
     if(s.disposed || (handle!=='refreshToken' && connection!==a.ws))return;
@@ -300,13 +390,13 @@ function enqueue(s,handle,value) {
   }).catch(error=>{
     if(!s.disposed)fault(s,error.message);
     if(error.status===401 || error.status===429)retry(a,error);
-  });
+  }).finally(()=>{a.pendingActions--;});
 }
 function detach(s) {
   s.disposed=true;cancelStart(s);const a=s.account;if(!a)return;
   a.nodes.delete(s);
   if(!a.nodes.size) {
-    a.disposed=true;clearTimeout(a.retryTimer);cleanupConnection(a);
+    a.disposed=true;clearTimeout(a.retryTimer);clearTimeout(a.renewTimer);cleanupConnection(a);
     for(const req of a.requests)req.destroy();accounts.delete(a.id);
   }
 }
