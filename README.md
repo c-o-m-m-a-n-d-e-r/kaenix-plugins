@@ -307,6 +307,7 @@ module.exports = {
 | **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
 | **BWM** | `bwm` | Automatisierung | Bewegungsmelder mit Helligkeitsschwelle, Nachlaufzeit und Grundbeleuchtung |
 | **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
+| **Mischer** | `mischer` | Energie | Regelt ein 3-Wege-Mischventil zyklisch mit gedämpften Stellschritten und Pumpenabschaltung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
@@ -376,6 +377,44 @@ Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`d
 
 **Eingänge:** 15 KNX-Eingänge (alle optional, überschreiben die Node-Konfiguration).  
 **Ausgänge:** `L1`, `L2`, `L3` (Phasen), `Alternativ heizen`, `Leistung (%)`, `Debug`.
+
+---
+
+### Mischer – Konfiguration
+
+[mischer/mischer-kaenix.js](mischer/mischer-kaenix.js), Version **1.0.0**,
+Kategorie **Energie**. Regelt ein 3-Wege-Mischventil über einen Prozent-Sollwert.
+Größere Ventilöffnung muss die Mischtemperatur erhöhen; 0 % schließt die warme
+Beimischung.
+
+**Eingänge in Reihenfolge:** Temperatur Ist (°C), Temperatur Soll (°C),
+Ventil Ist (%), Hysterese (K), Zyklus (s), Pumpenstatus (0/1 bzw. Boolean).
+
+**Ausgang:** Ventil Soll (%), begrenzt auf 0–100 %.
+
+| Einstellung | Standard | Bedeutung |
+|-------------|----------|-----------|
+| Temperatur Soll | Kein Vorgabewert | Solltemperatur in °C |
+| Hysterese | 1 K | Regelbeginn außerhalb Soll ± Hysterese; Halten ab Soll ± halber Hysterese |
+| Zyklus | 30 s | Berechnungsintervall, zulässig 1–86400 Sekunden |
+
+Eingänge überschreiben die entsprechenden Node-Einstellungen. Temperatur Ist
+und Ventil Ist benötigen gültige Messwerte; die Hysterese muss positiv sein.
+
+- Pumpen-Aus setzt sofort 0 % und stoppt den Timer. Währenddessen erfolgen keine
+  weiteren Berechnungen. Fehlender oder ungültiger Pumpenstatus gilt als Aus.
+- Nach Pumpen-Ein startet die Berechnung nach einem vollständigen Zyklus.
+  Eingangstelegramme aktualisieren die Werte ohne zusätzliche Regelschritte.
+- Stellschritte von 0,2 bis maximal 3 Prozentpunkten pro Zyklus, eine Trendbremse
+  und die Bestätigung von Richtungswechseln über zwei Zyklen reduzieren Pendeln.
+- Weicht Ventil Ist um mehr als einen Prozentpunkt vom letzten Stellauftrag ab,
+  wartet die Regelung auf die tatsächliche Ventilposition.
+- Ungültige Messwerte pausieren die Regelung bei unverändertem Stellauftrag;
+  Pumpen-Aus hat Vorrang. Unveränderte Ausgangswerte werden nicht erneut gesendet.
+
+Den Zyklus an Ventillaufzeit und thermische Reaktionszeit der Anlage anpassen.
+Eine für jede Anlage ideale Position oder Schwingungsfreiheit ist nicht garantiert.
+Details und Hinweise zu Rückmeldungen: [Mischer-Dokumentation](mischer/README.md).
 
 ---
 
