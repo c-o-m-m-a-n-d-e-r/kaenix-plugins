@@ -9,3 +9,8 @@
 # Nur Plugin-Dateien in den direkten Plugin-Unterordnern zulassen.
 !/*/
 !/*/*-kaenix.js
+
+# Eigener GitHub-Pages-Workflow für die Plugin-Veröffentlichung.
+!/.github/
+!/.github/workflows/
+!/.github/workflows/pages.yml

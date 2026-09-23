@@ -797,3 +797,16 @@ Leere Werte und 0 am Standort-Eingang verwenden die Node-/globale Einstellung
 bzw. wählen bei genau einem Garten automatisch dessen ID. Ungültige IDs oder
 mehrere Gärten ohne Auswahl melden die verfügbaren Standort-IDs in der Diagnose.
 Geräte-ID und Standort-ID sind unterschiedliche Werte.
+
+## Plugin-Dateien auf GitHub Pages veröffentlichen
+
+In `kaenix-plugins` unter **Settings → Pages → Build and deployment → Source**
+**GitHub Actions** auswählen. Die Custom Domain bleibt `plugins.kaenix.net`.
+Der Workflow `.github/workflows/pages.yml` veröffentlicht nach einem Push auf
+`main` die Plugin-Dateien mit unveränderten Pfaden. Er lässt sich außerdem unter
+**Actions → Publish plugin files to GitHub Pages → Run workflow** manuell starten.
+
+Der Deploy-Job vergibt `pages: write` und `id-token: write` explizit. Ein persönlicher
+Token oder das Secret `KAENIX_RELEASES_TOKEN` wird dafür nicht benötigt. Nach der
+Umstellung einen neuen Lauf dieses Workflows starten; ein Re-run des alten
+„pages build and deployment“-Laufs übernimmt die neue Workflow-Datei nicht.
