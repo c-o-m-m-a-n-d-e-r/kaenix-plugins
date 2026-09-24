@@ -301,6 +301,7 @@ module.exports = {
 
 | Plugin | Typ | Kategorie | Beschreibung |
 |--------|-----|-----------|------------------|
+| **MQTT Client** | `mqtt-client` | Datenaustausch | Sendet und empfängt Nachrichten auf einem Topic; [Dokumentation](mqtt-client/README.md) |
 | **Scaler** | `scaler` | Mathematik | Skaliert einen Wert: `(in × Faktor) + Offset` |
 | **Hysterese** | `hysteresis` | Logik | Zweipunktregelung mit Totband (Unter-/Obergrenze) |
 | **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
