@@ -637,7 +637,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.3**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.4**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -652,7 +652,8 @@ Vorrang. Szenen funktionieren auch ohne zugeordnetes Gerät.
 | 1 / 2 | IP-Adresse / Port (Standard 80) |
 | 3 / 4 | Gerätename / Geräte-ID |
 | 5 | Auf/Ab: 0 = auf, 1 = ab |
-| 6 / 7 / 8 | Öffnen / Schliessen / Stop: nur Telegramme mit Wert 1 |
+| 6 / 7 | Öffnen / Schliessen: nur Telegramme mit Wert 1 |
+| 8 | Stop: jedes 0- oder 1-Telegramm, auch wiederholte Werte |
 | 9 | Position: 0 % = offen, 100 % = geschlossen |
 | 10 | Lamellenwinkel 0–100 % des unterstützten Verstellbereichs |
 | 11 | Szene aktivieren: ID oder eindeutiger Name, ID hat Vorrang |
@@ -907,3 +908,6 @@ PowerView ab 1.0.3: Batterie- und Warnungsausgabe überarbeitet: Unterstützung 
 verschachtelte `battery`-Objekte, alternative Feldnamen (`batteryPercentage`,
 `batteryLevel`), `batteryStrength` in allen Generationen sowie Behebung der
 fälschlichen Unterdrückung bei `batteryStatus: 4`.
+
+PowerView ab 1.0.4: Stop verarbeitet 0 und 1, passend zu den richtungsabhängigen
+Stop-Telegrammen der Visu. Wiederholte Telegramme lösen erneut Stop aus.

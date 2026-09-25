@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -506,7 +506,7 @@ module.exports = {
     label: 'PowerView',
     color: '#f97316',
     description:
-        'Lokale PowerView-Steuerung Gen 1/2/3. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Öffnen/Schliessen/Stop/Status nur bei 1. Geräte-ID hat Vorrang. Fährt nur bei expliziter Rückmeldung oder aktivierter Laufzeitschätzung; Stop nicht bei Gen 1.',
+        'Lokale PowerView-Steuerung Gen 1/2/3. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Öffnen/Schliessen/Status nur bei 1; Stop bei jedem 0/1-Telegramm. Geräte-ID hat Vorrang. Fährt nur bei expliziter Rückmeldung oder aktivierter Laufzeitschätzung; Stop nicht bei Gen 1.',
     inputs: [
         { handle: 'ip', label: 'IP Adresse' },
         { handle: 'port', label: 'Port (Standard 80)' },
@@ -515,7 +515,7 @@ module.exports = {
         { handle: 'upDown', label: 'Auf/Ab (0=Auf, 1=Ab)' },
         { handle: 'open', label: 'Öffnen (1)' },
         { handle: 'close', label: 'Schliessen (1)' },
-        { handle: 'stop', label: 'Stop (1)' },
+        { handle: 'stop', label: 'Stop (0/1)' },
         { handle: 'position', label: 'Position (0=offen, 100=geschlossen)' },
         { handle: 'slats', label: 'Lamellenwinkel (0–100 %)' },
         { handle: 'scene', label: 'Szene aktivieren (ID oder Name)' },
@@ -654,8 +654,10 @@ module.exports = {
                   );
         for (const handle of handles) {
             const value = inputs[handle];
+            // KNX/Visu stop telegrams carry the previous direction: both bits stop.
+            if (handle === 'stop' && bit(value) === undefined) continue;
             if (
-                ['open', 'close', 'stop', 'triggerStatus'].includes(handle) &&
+                ['open', 'close', 'triggerStatus'].includes(handle) &&
                 bit(value) !== 1
             )
                 continue;
