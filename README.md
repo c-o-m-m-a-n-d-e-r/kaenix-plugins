@@ -313,6 +313,7 @@ module.exports = {
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
+| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 über Air+ Cloud/MQTT mit E-Mail-Code-Anmeldung; [Dokumentation](philips-air-plus/README.md) |
 
 ### BWM – Konfiguration
 
