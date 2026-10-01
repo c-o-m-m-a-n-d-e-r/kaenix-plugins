@@ -1,6 +1,6 @@
 /**
  * @plugin Philips Air Plus
- * @version 1.0.0
+ * @version 1.0.1
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -68,6 +68,7 @@ function fail(node, message) {
 }
 function notify(a, message, error = false) {
     if (account !== a) return;
+    a.message = message;
     for (const node of nodes.values()) {
         if (error) fail(node, message);
         else emit(node, 'status', message);
@@ -107,12 +108,18 @@ function disposeNode(id, preserveAccount = false) {
 }
 
 // Provider bodies and URLs can contain tokens: only emit controlled error messages.
-async function request(a, url, options = {}, redirect = false) {
+async function request(a, url, options = {}, redirect = false, step = 'Philips-Cloud') {
     let response;
     try {
         response = await fetch(url, { ...options, redirect: 'manual',
             signal: AbortSignal.any([a.abort.signal, AbortSignal.timeout(20000)]) });
-    } catch { throw new Error('Philips-Cloud nicht erreichbar oder Zeitüberschreitung'); }
+    } catch (error) {
+        const reasons = { ENOTFOUND: 'DNS-Auflösung fehlgeschlagen', EAI_AGAIN: 'DNS-Auflösung fehlgeschlagen',
+            ECONNREFUSED: 'Verbindung abgelehnt', ETIMEDOUT: 'Zeitüberschreitung',
+            CERT_HAS_EXPIRED: 'TLS-Zertifikat abgelaufen', UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'TLS-Zertifikat nicht vertrauenswürdig' };
+        const reason = reasons[error.cause?.code] || (error.name === 'TimeoutError' ? 'Zeitüberschreitung' : 'Cloud nicht erreichbar');
+        throw new Error(`${step}: ${reason}`);
+    }
     if (account !== a) throw new Error('Verbindung beendet');
     if (redirect) {
         if (![301, 302, 303, 307, 308].includes(response.status)) throw new Error('Philips-Anmeldung: Weiterleitung fehlt');
@@ -121,24 +128,28 @@ async function request(a, url, options = {}, redirect = false) {
         return new URL(location, url);
     }
     if (!response.ok) {
-        const err = new Error(`Philips-Cloud HTTP ${response.status}`);
+        const err = new Error(`${step}: HTTP ${response.status}`);
         err.auth = [400, 401, 403].includes(response.status);
         throw err;
     }
     let body;
     try { body = await response.json(); }
-    catch { throw new Error('Philips-Cloud: ungültige JSON-Antwort'); }
+    catch { throw new Error(`${step}: ungültige JSON-Antwort`); }
     if (!body || typeof body !== 'object') throw new Error('Philips-Cloud: ungültige Antwort');
-    if (body.errorCode !== undefined && body.errorCode !== 0) {
-        throw new Error(body.errorCode === 206001
+    if (body.errorCode !== undefined && Number(body.errorCode) !== 0) {
+        throw new Error(Number(body.errorCode) === 206001
             ? 'Philips-Konto unvollständig. Registrierung in der offiziellen App abschließen.'
-            : `Philips-Anmeldung fehlgeschlagen (Code ${Number(body.errorCode) || 'unbekannt'})`);
+            : `${step}: Philips hat die Anfrage abgelehnt (Code ${Number(body.errorCode) || 'unbekannt'})`);
     }
     return body;
 }
-function form(a, url, data) {
-    return request(a, url, { method: 'POST', body: new URLSearchParams(data) });
+function form(a, url, data, step = 'Philips-Anmeldung') {
+    return request(a, url, { method: 'POST', body: new URLSearchParams(data), headers: {
+        Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'okhttp/4.12.0 (Android 14; Pixel 7)',
+    } }, false, step);
 }
+function providerSucceeded(result) { return result.errorCode === 0 || result.errorCode === '0'; }
 function api(a, suffix) {
     return request(a, API + suffix, { headers: { Authorization: `Bearer ${a.tokens.access_token}`,
         Accept: 'application/json', 'User-Agent': 'okhttp/4.12.0 (Android 14; Pixel 7)' } });
@@ -153,8 +164,8 @@ function saveTokens(a, result) {
     persist(a);
 }
 function persist(a) {
-    const context = [...nodes.values()][0]?.context;
-    if (context?.setGlobalSetting('session', JSON.stringify({ email: a.email, ...a.tokens,
+    const context = a.context;
+    if (!context || context.setGlobalSetting('session', JSON.stringify({ email: a.email, ...a.tokens, otpAt: a.otpAt,
         ...(a.vToken ? { vToken: a.vToken, otpAt: a.otpAt } : {}) })) === false) {
         throw new Error('Philips-Sitzung konnte nicht gespeichert werden');
     }
@@ -163,7 +174,8 @@ async function login(a, code) {
     if (!a.vToken || Date.now() - a.otpAt > 10 * 60 * 1000) throw new Error('Zuerst einen neuen E-Mail-Code anfordern');
     if (!/^\d{4,10}$/.test(code)) throw new Error('Gültigen E-Mail-Code eintragen');
     const verification = await form(a, `${CDC}/accounts.auth.otp.email.login`, {
-        email: a.email, code, vToken: a.vToken, apiKey: API_KEY, format: 'json' });
+        email: a.email, code, vToken: a.vToken, apiKey: API_KEY, format: 'json' }, 'Code bestätigen');
+    if (!providerSucceeded(verification)) throw new Error('Code bestätigen: Erfolgsbestätigung von Philips fehlt');
     const session = verification.sessionInfo?.cookieValue;
     if (!session) throw new Error('Philips-Anmeldung: Sitzung fehlt');
     const verifier = crypto.randomBytes(64).toString('base64url');
@@ -193,6 +205,7 @@ async function login(a, code) {
 }
 function scheduleRefresh(a, delay) {
     clearTimeout(a.refreshTimer);
+    if (!nodes.size) return;
     a.refreshTimer = setTimeout(() => {
         if (account !== a) return;
         if (a.busy) { scheduleRefresh(a, 30000); return; }
@@ -221,6 +234,7 @@ async function discover(a) {
     a.devices = devices.filter(d => typeof (d?.uuid || d?.id) === 'string').map(d => ({
         uuid: (d.uuid || d.id).replace(/^da-/, ''), name: String(d.name || d.deviceName || d.friendlyName || 'Philips Air+'),
     })).filter(d => /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(d.uuid));
+    if (!nodes.size) return;
     const signature = await api(a, '/signature');
     const user = await api(a, '');
     if (!signature.signature || !user.id) throw new Error('Philips-Cloud: MQTT-Signatur oder Benutzer-ID fehlt');
@@ -388,24 +402,109 @@ function connect(a, connection) {
     });
 }
 
+function ensureAccount(context) {
+    const email = String(context.globalSetting('email') || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (account) { stopAccount(account); account = undefined; }
+        throw new Error('Philips-Konto-E-Mail in den globalen Plugin-Einstellungen eintragen');
+    }
+    const stored = String(context.globalSetting('session') || '');
+    if (account && (account.email !== email || (!stored && (account.tokens || account.vToken)))) {
+        stopAccount(account);
+        account = undefined;
+        for (const node of nodes.values()) { node.uuid = undefined; node.last = {}; }
+    }
+    if (!account) {
+        account = { email, context, abort: new AbortController(), connections: new Map(), instance: crypto.randomBytes(4).toString('hex') };
+        try {
+            const saved = JSON.parse(stored);
+            if (saved.email === email) {
+                if (saved.access_token) account.tokens = { access_token: saved.access_token,
+                    refresh_token: saved.refresh_token, expiresAt: saved.expiresAt };
+                if (Number.isFinite(saved.otpAt)) account.otpAt = saved.otpAt;
+                if (saved.vToken && Date.now() - saved.otpAt < 10 * 60 * 1000) {
+                    account.vToken = saved.vToken;
+                    account.otpAt = saved.otpAt;
+                }
+            }
+        } catch { /* New account */ }
+    }
+    account.context = context;
+    return account;
+}
+async function globalAction(action, values, context) {
+    if (!['requestCode', 'verifyCode', 'logout'].includes(action)) throw new Error('Unbekannte Philips-Aktion');
+    if (action === 'logout') {
+        if (account?.busy) throw new Error('Philips-Anfrage läuft bereits; bitte warten');
+        if (context.setGlobalSetting('session', '') === false) throw new Error('Abmelden konnte nicht gespeichert werden');
+        if (account) { stopAccount(account); account = undefined; }
+        for (const node of nodes.values()) { node.uuid = undefined; node.last = {}; status(node, false, 'Abgemeldet'); }
+        return { message: 'Abgemeldet', devices: [] };
+    }
+    const a = ensureAccount(context);
+    if (a.busy) throw new Error('Philips-Anfrage läuft bereits; bitte warten');
+    a.busy = true;
+    try {
+        if (action === 'requestCode') {
+            if (a.otpAt && Date.now() - a.otpAt < 60000) throw new Error('Bitte mindestens 60 Sekunden vor einem neuen E-Mail-Code warten');
+            a.otpAt = Date.now();
+            a.vToken = undefined;
+            persist(a); // Cooldown and invalidation survive reloads, including failed sends.
+            context.info?.('Philips: E-Mail-Code-Anforderung gestartet');
+            const result = await form(a, `${CDC}/accounts.auth.otp.email.sendCode`, {
+                email: a.email, apiKey: API_KEY, format: 'json' }, 'Code anfordern');
+            if (!providerSucceeded(result) || !result.vToken) throw new Error('Code anfordern: Erfolgsbestätigung oder Verifikationstoken von Philips fehlt');
+            a.vToken = result.vToken;
+            persist(a);
+            const message = 'Philips hat die Code-Anforderung bestätigt. Posteingang und Spam-Ordner prüfen, Code eingeben und Anmeldung bestätigen.';
+            notify(a, message);
+            context.info?.('Philips: E-Mail-Code-Anforderung vom Anbieter bestätigt');
+            return { message, codeRequested: true };
+        }
+        await login(a, String(values.code || '').trim());
+        notify(a, 'Bei Philips angemeldet');
+        try { await discover(a); }
+        catch (error) {
+            if (account !== a) throw error;
+            notify(a, error.message, true);
+            context.warn(error.message);
+            scheduleRefresh(a, 5 * 60 * 1000);
+            return { message: `Anmeldung erfolgreich. Geräteabruf fehlgeschlagen: ${error.message}`, devices: [], signedIn: true };
+        }
+        const message = a.devices.length ? 'Anmeldung erfolgreich' : 'Anmeldung erfolgreich, aber keine Air+-Geräte gefunden. Konto in der offiziellen App prüfen.';
+        notify(a, message);
+        context.info?.('Philips: Anmeldung erfolgreich');
+        return { message, signedIn: true, devices: a.devices };
+    } catch (error) {
+        notify(a, error.message, true);
+        context.warn(error.message);
+        throw error;
+    } finally { a.busy = false; }
+}
+
 module.exports = {
     type: 'philips-air-plus', label: 'Philips Air Plus', category: 'Geräte', color: '#f97316',
     description: 'Philips AC0651/10 über Air+ Cloud/MQTT steuern. Anmeldung per E-Mail-Code, Live-Sensoren und Filterstatus.',
     globalSettings: [
         { key: 'email', label: 'Philips Air+ Konto (E-Mail)', type: 'text' },
-        { key: 'session', label: 'Gespeicherte Sitzung (automatisch; zum Abmelden leeren)', type: 'password' },
     ],
+    globalActions: [
+        { key: 'requestCode', label: 'E-Mail-Code anfordern' },
+        { key: 'verifyCode', label: 'Anmeldung bestätigen', fields: [
+            { key: 'code', label: 'E-Mail-Code', type: 'password', placeholder: 'Code aus der E-Mail',
+                inputMode: 'numeric', autoComplete: 'one-time-code' },
+        ] },
+        { key: 'logout', label: 'Abmelden' },
+    ],
+    handleGlobalAction: globalAction,
     config: [
         { key: 'deviceUuid', label: 'Geräte-UUID (leer bei genau einem Gerät)', type: 'text' },
-        { key: 'verificationCode', label: 'E-Mail-Code (danach Anmeldung bestätigen)', type: 'password' },
     ],
     inputs: [
         { handle: 'power', label: 'Ein/Aus (1/0)' },
         { handle: 'mode', label: 'Modus (0 Auto, 1 Mittel, 17 Schlaf, 18 Turbo)' },
         { handle: 'standbyMonitor', label: 'Standby-Monitor (1/0)' },
         { handle: 'triggerStatus', label: 'Status abfragen' },
-        { handle: 'requestCode', label: 'E-Mail-Code anfordern' },
-        { handle: 'verifyCode', label: 'Anmeldung bestätigen' },
         { handle: 'resetFilterClean', label: 'Filter gereinigt (Trigger)' },
         { handle: 'resetFilterReplace', label: 'Filter ersetzt (Trigger)' },
         { handle: 'reconnect', label: 'Neu verbinden' },
@@ -430,21 +529,11 @@ module.exports = {
     execute(inputs, data, context) {
         const id = context.nodeId;
         try {
-            const email = String(context.globalSetting('email') || '').trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                disposeNode(id);
-                throw new Error('Philips-Konto-E-Mail in den globalen Plugin-Einstellungen eintragen');
-            }
+            const a = ensureAccount(context);
             const configuredUuid = String(data.deviceUuid || '').trim().replace(/^da-/, '');
             if (configuredUuid && !/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(configuredUuid)) {
                 disposeNode(id);
                 throw new Error('Ungültige Geräte-UUID');
-            }
-            const stored = String(context.globalSetting('session') || '');
-            if (account && (account.email !== email || (!stored && (account.tokens || account.vToken)))) {
-                stopAccount(account);
-                account = undefined;
-                for (const node of nodes.values()) { node.uuid = undefined; node.last = {}; }
             }
             let node = nodes.get(id);
             if (node && node.configuredUuid !== configuredUuid) { disposeNode(id, true); node = undefined; }
@@ -453,20 +542,6 @@ module.exports = {
                 nodes.set(id, node);
             }
             node.context = context;
-            if (!account) {
-                account = { email, abort: new AbortController(), connections: new Map(), instance: crypto.randomBytes(4).toString('hex') };
-                try {
-                    const saved = JSON.parse(stored);
-                    if (saved.email === email) {
-                        if (saved.access_token) account.tokens = saved;
-                        if (saved.vToken && Date.now() - saved.otpAt < 10 * 60 * 1000) {
-                            account.vToken = saved.vToken;
-                            account.otpAt = saved.otpAt;
-                        }
-                    }
-                } catch { /* New account */ }
-            }
-            const a = account;
             if (!a.started) {
                 a.started = true;
                 status(node, false, a.tokens ? 'Verbinde …' : a.vToken
@@ -479,24 +554,6 @@ module.exports = {
             const handle = context.triggerHandle;
             const value = inputs[handle];
             const pulse = [true, 1, '1'].includes(value);
-            if (handle === 'requestCode' && pulse) {
-                if (a.otpAt && Date.now() - a.otpAt < 60000) throw new Error('Bitte mindestens 60 Sekunden vor einem neuen E-Mail-Code warten');
-                run(a, async () => {
-                    // Reserve cooldown even on a failed request.
-                    a.otpAt = Date.now();
-                    a.vToken = undefined;
-                    const result = await form(a, `${CDC}/accounts.auth.otp.email.sendCode`, { email, apiKey: API_KEY, format: 'json' });
-                    if (!result.vToken) throw new Error('Philips-Anmeldung: Verifikationstoken fehlt');
-                    a.vToken = result.vToken;
-                    persist(a);
-                    notify(a, 'E-Mail-Code gesendet; eintragen und Anmeldung bestätigen');
-                });
-                return {};
-            }
-            if (handle === 'verifyCode' && pulse) {
-                run(a, async () => { await login(a, String(data.verificationCode || '').trim()); await discover(a); });
-                return {};
-            }
             if (handle === 'reconnect' && pulse) {
                 if (!a.tokens) throw new Error('Zuerst per E-Mail-Code anmelden');
                 if (a.reconnectAt && Date.now() - a.reconnectAt < 30000) throw new Error('Bitte 30 Sekunden vor erneutem Verbindungsaufbau warten');
@@ -535,6 +592,9 @@ module.exports = {
     },
     dispose(nodeId) {
         if (nodeId != null) disposeNode(nodeId);
-        else for (const id of [...nodes.keys()]) disposeNode(id);
+        else {
+            for (const id of [...nodes.keys()]) disposeNode(id);
+            if (account) { stopAccount(account); account = undefined; }
+        }
     },
 };

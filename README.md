@@ -313,7 +313,7 @@ module.exports = {
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
-| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 über Air+ Cloud/MQTT mit E-Mail-Code-Anmeldung; [Dokumentation](philips-air-plus/README.md) |
+| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 über Air+ Cloud/MQTT mit Anmeldebuttons in globalen Einstellungen; [Dokumentation](philips-air-plus/README.md) |
 
 ### BWM – Konfiguration
 
@@ -912,3 +912,17 @@ fälschlichen Unterdrückung bei `batteryStatus: 4`.
 
 PowerView ab 1.0.4: Stop verarbeitet 0 und 1, passend zu den richtungsabhängigen
 Stop-Telegrammen der Visu. Wiederholte Telegramme lösen erneut Stop aus.
+
+
+### Globale Plugin-Aktionen
+
+Zusätzlich zu `globalSettings` können Plugins `globalActions` deklarieren. Die
+Buttons erscheinen ausschließlich im globalen Einstellungsformular und werden
+über den Admin-Endpunkt `POST /api/plugins/:type/actions/:action` ausgeführt.
+`async handleGlobalAction(action, values, context)` erhält globale Lese-/Schreib-
+Helfer sowie `info`/`warn`, unabhängig von einer Node. Das Ergebnis kann `message`
+und eine Geräte-Liste (`devices` mit `uuid`/`name`) enthalten. Aktionseingaben stehen
+in `fields` und werden nicht gespeichert. Bei Plugins mit globalen Aktionen werden
+nur deklarierte `globalSettings` an den Browser ausgeliefert bzw. von dort geändert;
+interne Sitzungswerte bleiben im Backend. Voraussetzung ist ein gemeinsam
+aktualisiertes kaenix-Backend/Frontend mit Unterstützung dieser Schnittstelle.
