@@ -315,6 +315,7 @@ module.exports = {
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
 | **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 über Air+ Cloud/MQTT mit Anmeldebuttons in globalen Einstellungen; [Dokumentation](philips-air-plus/README.md) |
+| **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
 
 ### BWM – Konfiguration
 
