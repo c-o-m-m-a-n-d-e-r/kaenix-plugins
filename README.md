@@ -307,6 +307,7 @@ module.exports = {
 | **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
 | **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
 | **BWM** | `bwm` | Automatisierung | Bewegungsmelder mit Helligkeitsschwelle, Nachlaufzeit und Grundbeleuchtung |
+| **Heizung** | `heizung` | Energie | PI-Raumtemperaturregelung mit Ventil- und Solltemperaturausgang; [Dokumentation](heizung/README.md) |
 | **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
 | **Mischer** | `mischer` | Energie | Regelt ein 3-Wege-Mischventil zyklisch mit gedämpften Stellschritten und Pumpenabschaltung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
