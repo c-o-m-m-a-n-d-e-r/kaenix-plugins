@@ -1,6 +1,6 @@
 /**
  * @plugin    Raum
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -20,6 +20,10 @@ module.exports = {
   // Lässt die Logic Engine diesen Node-Typ bei JEDEM Bus-Telegramm neu auswerten,
   // statt nur bei Änderungen an einer fest verdrahteten Eingangs-GA.
   watchesKnxBus: true,
+  // Lokale Writes sind bereits im Cache, bevor sie hier eintreffen. Ihr
+  // Bus-Echo wird vom KNX-Manager unterdrückt; den Status daher sofort auswerten.
+  // _knxEvent führt den gespeicherten Schaltbefehl nicht erneut aus.
+  watchesLocalKnxWrites: true,
 
   config: [
     { key: 'pageId', label: 'Raum', type: 'room-picker' },
