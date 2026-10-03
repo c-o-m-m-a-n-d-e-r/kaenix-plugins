@@ -1,6 +1,6 @@
 /**
  * @plugin Philips Air Plus
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -482,6 +482,22 @@ async function globalAction(action, values, context) {
     } finally { a.busy = false; }
 }
 
+// Expose only flow state; verification tokens and OAuth sessions stay server-side.
+function getGlobalUiState(settings) {
+    let session;
+    try { session = JSON.parse(settings.session || '{}'); } catch { session = {}; }
+    const sameAccount = session.email === String(settings.email || '').trim();
+    const phase = sameAccount && session.access_token ? 'signedIn'
+        : sameAccount && session.vToken ? 'codeRequested' : 'unpaired';
+    return {
+        phase,
+        readOnlyKeys: phase === 'unpaired' ? [] : ['email'],
+        visibleActionKeys: phase === 'signedIn' ? ['logout']
+            : phase === 'codeRequested' ? ['verifyCode', 'requestCode', 'logout'] : ['requestCode'],
+        hideSave: true,
+    };
+}
+
 module.exports = {
     type: 'philips-air-plus', label: 'Philips Air Plus', category: 'Geräte', color: '#f97316',
     description: 'Philips AC0651/10 über Air+ Cloud/MQTT steuern. Anmeldung per E-Mail-Code, Live-Sensoren und Filterstatus.',
@@ -497,6 +513,7 @@ module.exports = {
         { key: 'logout', label: 'Abmelden' },
     ],
     handleGlobalAction: globalAction,
+    getGlobalUiState,
     config: [
         { key: 'deviceUuid', label: 'Geräte-UUID (leer bei genau einem Gerät)', type: 'text' },
     ],
