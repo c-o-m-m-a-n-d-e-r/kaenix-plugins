@@ -386,10 +386,12 @@ Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`d
 
 ### Mischer – Konfiguration
 
-[mischer/mischer-kaenix.js](mischer/mischer-kaenix.js), Version **1.0.0**,
+[mischer/mischer-kaenix.js](mischer/mischer-kaenix.js), Version **1.0.1**,
 Kategorie **Energie**. Regelt ein 3-Wege-Mischventil über einen Prozent-Sollwert.
-Größere Ventilöffnung muss die Mischtemperatur erhöhen; 0 % schließt die warme
-Beimischung.
+Betriebsart **Heizen**: Öffnen erhöht die Mischtemperatur (heißes Wasser).
+Betriebsart **Kühlen**: Öffnen senkt die Mischtemperatur (kaltes Wasser).
+Pumpen-Aus fährt in beiden Modi auf 0 %. Ein Moduswechsel setzt die Trend- und
+Richtungshistorie zurück und startet einen vollständigen Zyklus neu.
 
 **Eingänge in Reihenfolge:** Temperatur Ist (°C), Temperatur Soll (°C),
 Ventil Ist (%), Hysterese (K), Zyklus (s), Pumpenstatus (0/1 bzw. Boolean).
@@ -398,6 +400,7 @@ Ventil Ist (%), Hysterese (K), Zyklus (s), Pumpenstatus (0/1 bzw. Boolean).
 
 | Einstellung | Standard | Bedeutung |
 |-------------|----------|-----------|
+| Betriebsart | Heizen | Heizen oder Kühlen; bestimmt die Wirkung der Ventilöffnung |
 | Temperatur Soll | Kein Vorgabewert | Solltemperatur in °C |
 | Hysterese | 1 K | Regelbeginn außerhalb Soll ± Hysterese; Halten ab Soll ± halber Hysterese |
 | Zyklus | 30 s | Berechnungsintervall, zulässig 1–86400 Sekunden |

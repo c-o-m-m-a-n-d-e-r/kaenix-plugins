@@ -1,6 +1,6 @@
 /**
  * @plugin    Mischer
- * @version   1.0.0
+ * @version   1.0.1
  * @author    Christian Brauwers
  */
 const states = new Map();
@@ -40,7 +40,8 @@ function regulate(s) {
     return;
   }
 
-  const direction = Math.sign(error);
+  const temperatureDirection = Math.sign(error);
+  const direction = temperatureDirection * s.values.effect;
   // Ein Gegensteuern erst nach zwei aufeinanderfolgenden Zyklen zulassen.
   if (s.direction && direction !== s.direction && s.pendingDirection !== direction) {
     s.pendingDirection = direction;
@@ -49,7 +50,7 @@ function regulate(s) {
   s.pendingDirection = 0;
   // Schon ausreichend schnelle Annäherung: thermische Reaktion abwarten.
   const remaining = Math.abs(error) - hysteresis / 2;
-  const approach = direction * trend;
+  const approach = temperatureDirection * trend;
   if (approach > 0 && approach * 2 >= remaining) return;
   const step = Math.min(3, Math.max(0.2, remaining * 0.5 - Math.max(0, approach)));
   const target = clamp(valve + direction * step);
@@ -68,7 +69,7 @@ function schedule(s) {
 
 module.exports = {
   type: 'mischer', category: 'Energie', label: 'Mischer', color: '#f97316',
-  description: 'Gedämpfte 3-Wege-Mischerregelung. Größere Öffnung erhöht die Temperatur. Pumpen-Aus fährt sofort auf 0 %. Hysterese als ±K; Zyklus in Sekunden. Kleine Schritte, Trendbremse und Rückmeldungsüberwachung.',
+  description: 'Gedämpfte 3-Wege-Mischerregelung. Heizen: Öffnen erhöht die Temperatur. Kühlen: Öffnen senkt die Temperatur. Pumpen-Aus fährt in beiden Betriebsarten auf 0 %.',
   inputs: [
     { handle: 'temperaturIst', label: 'Temperatur Ist (°C)' },
     { handle: 'temperaturSoll', label: 'Temperatur Soll (°C)' },
@@ -79,6 +80,8 @@ module.exports = {
   ],
   outputs: [{ handle: 'ventilSoll', label: 'Ventil Soll (%)' }],
   config: [
+    { key: 'modus', label: 'Betriebsart', type: 'select', default: 'heizen',
+      options: [{ value: 'heizen', label: 'Heizen' }, { value: 'kuehlen', label: 'Kühlen' }] },
     { key: 'temperaturSoll', label: 'Temperatur Soll (°C)', type: 'number' },
     { key: 'hysterese', label: 'Hysterese (±K)', type: 'number', default: 1 },
     { key: 'zyklus', label: 'Zyklus (s)', type: 'number', default: 30 },
@@ -102,7 +105,9 @@ module.exports = {
       return {};
     }
     const pick = (key, fallback) => number(s.inputs[key] ?? data[key] ?? fallback);
+    const mode = data.modus || 'heizen';
     const values = {
+      effect: mode === 'heizen' ? 1 : mode === 'kuehlen' ? -1 : NaN,
       temp: number(s.inputs.temperaturIst), setpoint: pick('temperaturSoll'),
       valve: number(s.inputs.ventilIst), hysteresis: pick('hysterese', 1), cycle: pick('zyklus', 30),
     };
@@ -113,7 +118,7 @@ module.exports = {
       context.nodeLog?.('Regelung pausiert – Eingänge prüfen');
       return {};
     }
-    const restart = !s.running || values.cycle !== s.values?.cycle;
+    const restart = !s.running || values.cycle !== s.values?.cycle || values.effect !== s.values?.effect;
     if (values.setpoint !== s.values?.setpoint || values.hysteresis !== s.values?.hysteresis) {
       s.previousTemp = null;
       s.pendingDirection = 0;
