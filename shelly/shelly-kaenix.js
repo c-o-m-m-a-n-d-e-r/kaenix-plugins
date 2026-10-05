@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -26,6 +26,7 @@ function getState(nodeId) {
       log:         null,
       nodeLog:     null,
       prevInputs:  {},
+      prevOutputs: new Map(),
       ip:          null,
       port:        null,
     });
@@ -525,7 +526,11 @@ module.exports = {
 
     // Emit-Referenz bei jedem Aufruf aktualisieren, damit laufende Timer
     // immer die aktuellste propagateFn-Referenz nutzen.
-    state.emit    = (h, v) => context.emitOutput(h, v);
+    state.emit    = (h, v) => {
+      if (state.prevOutputs.has(h) && state.prevOutputs.get(h) === v) return;
+      context.emitOutput(h, v);
+      state.prevOutputs.set(h, v);
+    };
     state.warn    = (...a) => context.warn(...a);
     state.log     = (...a) => context.log(...a);
     state.nodeLog = (...a) => context.nodeLog(...a);
@@ -555,6 +560,7 @@ module.exports = {
       state.detecting  = false;
       state.ip         = cfg.ip;
       state.port       = cfg.port;
+      state.prevOutputs.clear();
       if (state.timer) { clearInterval(state.timer); state.timer = null; }
     }
 
@@ -583,7 +589,7 @@ module.exports = {
         .catch((e) => {
           state.detecting = false;
           context.warn(`Verbindung zu ${cfg.ip} fehlgeschlagen: ${e.message}`);
-          context.emitOutput('connected', 0);
+          state.emit('connected', 0);
         });
       return {};
     }
