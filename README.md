@@ -386,7 +386,7 @@ Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`d
 
 ### Mischer – Konfiguration
 
-[mischer/mischer-kaenix.js](mischer/mischer-kaenix.js), Version **1.0.1**,
+[mischer/mischer-kaenix.js](mischer/mischer-kaenix.js), Version **1.0.2**,
 Kategorie **Energie**. Regelt ein 3-Wege-Mischventil über einen Prozent-Sollwert.
 Betriebsart **Heizen**: Öffnen erhöht die Mischtemperatur (heißes Wasser).
 Betriebsart **Kühlen**: Öffnen senkt die Mischtemperatur (kaltes Wasser).
@@ -396,7 +396,7 @@ Richtungshistorie zurück und startet einen vollständigen Zyklus neu.
 **Eingänge in Reihenfolge:** Temperatur Ist (°C), Temperatur Soll (°C),
 Ventil Ist (%), Hysterese (K), Zyklus (s), Pumpenstatus (0/1 bzw. Boolean).
 
-**Ausgang:** Ventil Soll (%), begrenzt auf 0–100 %.
+**Ausgang:** Ventil Soll (%), ganze Prozentwerte von 0 bis 100.
 
 | Einstellung | Standard | Bedeutung |
 |-------------|----------|-----------|
@@ -410,14 +410,20 @@ und Ventil Ist benötigen gültige Messwerte; die Hysterese muss positiv sein.
 
 - Pumpen-Aus setzt sofort 0 % und stoppt den Timer. Währenddessen erfolgen keine
   weiteren Berechnungen. Fehlender oder ungültiger Pumpenstatus gilt als Aus.
-- Nach Pumpen-Ein startet die Berechnung nach einem vollständigen Zyklus.
+- Nach Pumpen-Ein startet die Berechnung nach einem vollständigen Zyklus von der
+  gemeldeten Ventilposition; ein alter 0-%-Auftrag blockiert den Start nicht.
   Eingangstelegramme aktualisieren die Werte ohne zusätzliche Regelschritte.
-- Stellschritte von 0,2 bis maximal 3 Prozentpunkten pro Zyklus, eine Trendbremse
+- Ganze Stellschritte von 1 bis maximal 3 Prozentpunkten pro Zyklus, eine Trendbremse
   und die Bestätigung von Richtungswechseln über zwei Zyklen reduzieren Pendeln.
 - Weicht Ventil Ist um mehr als einen Prozentpunkt vom letzten Stellauftrag ab,
-  wartet die Regelung auf die tatsächliche Ventilposition.
+  wartet die Regelung auf die tatsächliche Ventilposition. Alle drei Wartezyklen
+  wird derselbe Auftrag erneut gesendet. Weitere Schritte basieren auf dem letzten
+  Sollwert, damit gerundete Rückmeldungen den Fortschritt nicht verhindern.
 - Ungültige Messwerte pausieren die Regelung bei unverändertem Stellauftrag;
-  Pumpen-Aus hat Vorrang. Unveränderte Ausgangswerte werden nicht erneut gesendet.
+  Pumpen-Aus hat Vorrang. Abgesehen von der Wiederholung bei fehlender Rückmeldung
+  werden unveränderte Ausgangswerte nicht erneut gesendet.
+- Jeder aktive Zyklus protokolliert Messwerte, Stellauftrag und Entscheidungsgrund
+  im Plugin-Log (z. B. `WAIT_FEEDBACK`, `DEADBAND`, `ADJUST` oder `LIMIT`).
 
 Den Zyklus an Ventillaufzeit und thermische Reaktionszeit der Anlage anpassen.
 Eine für jede Anlage ideale Position oder Schwingungsfreiheit ist nicht garantiert.

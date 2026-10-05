@@ -1,6 +1,6 @@
 /**
  * @plugin    Mischer
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  */
 const states = new Map();
@@ -18,11 +18,14 @@ function stop(s) {
   s.pendingDirection = 0;
   s.active = false;
 }
-function emit(s, value) {
-  value = Math.round(clamp(value) * 10) / 10;
-  if (s.target === value) return;
+function emit(s, value, force = false) {
+  value = Math.round(clamp(value));
+  if (!force && s.target === value) return;
   s.target = value;
   s.context.emitOutput('ventilSoll', value);
+}
+function trace(s, reason) {
+  s.context.log?.('Mischer', reason, { ...s.values, target: s.target });
 }
 function regulate(s) {
   const { temp, setpoint, valve, hysteresis } = s.values;
@@ -31,12 +34,23 @@ function regulate(s) {
   s.previousTemp = temp;
 
   // Erst den bisherigen Stellauftrag erreichen, keine Befehle aufstapeln.
-  if (s.target != null && Math.abs(valve - s.target) > 1) return;
+  if (s.target != null && Math.abs(valve - s.target) > 1) {
+    s.waitCycles = (s.waitCycles || 0) + 1;
+    trace(s, 'WAIT_FEEDBACK');
+    // Verlorene Telegramme erneut senden, ohne weitere Öffnung aufzustapeln.
+    if (s.waitCycles % 3 === 0) emit(s, s.target, true);
+    return;
+  }
+  s.waitCycles = 0;
+  // Am letzten Auftrag weiterrechnen: KNX-Quantisierung und die 1-%-Toleranz
+  // dürfen kleine Schritte nicht bei jedem Zyklus wieder verschlucken.
+  const position = s.target ?? Math.round(valve);
   if (Math.abs(error) <= hysteresis / 2) s.active = false;
   if (Math.abs(error) > hysteresis) s.active = true;
   if (!s.active) {
     s.pendingDirection = 0;
     if (s.target == null) emit(s, valve);
+    trace(s, 'DEADBAND');
     return;
   }
 
@@ -45,17 +59,19 @@ function regulate(s) {
   // Ein Gegensteuern erst nach zwei aufeinanderfolgenden Zyklen zulassen.
   if (s.direction && direction !== s.direction && s.pendingDirection !== direction) {
     s.pendingDirection = direction;
+    trace(s, 'WAIT_DIRECTION');
     return;
   }
   s.pendingDirection = 0;
   // Schon ausreichend schnelle Annäherung: thermische Reaktion abwarten.
   const remaining = Math.abs(error) - hysteresis / 2;
   const approach = temperatureDirection * trend;
-  if (approach > 0 && approach * 2 >= remaining) return;
-  const step = Math.min(3, Math.max(0.2, remaining * 0.5 - Math.max(0, approach)));
-  const target = clamp(valve + direction * step);
+  if (approach > 0 && approach * 2 >= remaining) { trace(s, 'WAIT_TREND'); return; }
+  const step = Math.min(3, Math.max(1, Math.round(remaining * 0.5 - Math.max(0, approach))));
+  const target = clamp(position + direction * step);
   s.direction = direction;
   emit(s, target);
+  trace(s, target === position ? 'LIMIT' : 'ADJUST');
 }
 function schedule(s) {
   s.timer = setTimeout(() => {
@@ -123,6 +139,13 @@ module.exports = {
       s.previousTemp = null;
       s.pendingDirection = 0;
       s.active = false;
+    }
+    if (!s.running) {
+      // Pumpen-Ein bzw. Wiederanlauf übernimmt die reale Position. Ein früherer
+      // Abschaltauftrag (auch bei noch fehlendem Pumpenstatus) ist kein Fahrziel
+      // der neu gestarteten Regelung.
+      s.target = null;
+      s.waitCycles = 0;
     }
     s.values = values;
     s.running = true;
