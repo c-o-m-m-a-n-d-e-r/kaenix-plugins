@@ -937,3 +937,37 @@ in `fields` und werden nicht gespeichert. Bei Plugins mit globalen Aktionen werd
 nur deklarierte `globalSettings` an den Browser ausgeliefert bzw. von dort geändert;
 interne Sitzungswerte bleiben im Backend. Voraussetzung ist ein gemeinsam
 aktualisiertes kaenix-Backend/Frontend mit Unterstützung dieser Schnittstelle.
+
+
+## Zentral
+
+`zentral/zentral-kaenix.js`, Version **1.0.0**, Kategorie **Automatisierung**.
+
+Die Node wählt einen Widgettyp als Widgetkategorie und anschließend mehrere
+Widgets aus der gesamten Widgetbibliothek. Gemeinsame Widgets mit mehreren
+Platzierungen erscheinen einmal. Ein Kategorie-Wechsel entfernt die Auswahl und
+bestehende Verbindungen der Node, damit alte Verbindungen nicht anders belegte
+Anschlüsse steuern.
+
+Bei **Jalousien** stehen die Eingänge `move` (0=Auf, 1=Ab), `stop` (0/1),
+`position` und `slat` (jeweils 0–100 %) sowie die Rückmeldungen `position` und
+`slat` bereit. Weitere Kategorien umfassen Schalter, Taster, Dimmer, Wertgeber,
+Temperatur, Klima, Farbe, Szenen, Musik und reine Status-/Messwert-Widgets.
+Nicht steuerbare Kategorien erhalten ausschließlich Ausgänge. Kameras und
+Platzhalter bieten keine KNX-Anschlüsse und werden nicht angeboten.
+
+Jedes Eingangstelegramm wird an alle ausgewählten, passend konfigurierten
+Befehlsadressen gesendet. Gleiche Gruppenadressen werden pro Telegramm nur einmal
+beschrieben. Fehlende Anschlüsse werden übersprungen; Statusadressen dienen nicht
+als Ersatz für Befehlsadressen. Start, Reload und Statusereignisse senden keine
+alten Befehle erneut. Gespeicherte KNX-Datenpunkttypen haben Vorrang.
+
+Ausgänge berücksichtigen bekannte Rückmeldungen der ausgewählten Widgets:
+Ein/Aus meldet 1, sobald eines aktiv ist; numerische Messwerte und Prozentwerte
+liefern den Mittelwert. Modi, Texte und Farben werden nur bei Übereinstimmung
+ausgegeben. Ohne bekannte Werte erfolgt keine Ausgabe. Wo möglich wird bei
+fehlender separater Rückmeldung die Befehlsadresse beobachtet.
+
+Benötigt die Backend-Helfer `getCentralWidgets`, `getCentralDpt`,
+`readCentralAddress`, `writeCentralAddress` und Frontend-Unterstützung für
+`dynamicInputs` sowie `category-widget-checklist` aus dieser Änderung.
