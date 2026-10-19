@@ -1,6 +1,6 @@
 /**
  * @plugin Philips Air Plus
- * @version 1.0.2
+ * @version 1.0.3
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -78,6 +78,7 @@ function closeConnections(a) {
     for (const connection of a.connections.values()) {
         clearTimeout(connection.retry);
         clearTimeout(connection.watchdog);
+        clearVerification(connection);
         connection.closed = true;
         connection.client?.end(true);
     }
@@ -99,6 +100,7 @@ function disposeNode(id, preserveAccount = false) {
                 connection.closed = true;
                 clearTimeout(connection.retry);
                 clearTimeout(connection.watchdog);
+                clearVerification(connection);
                 connection.client?.end(true);
                 account.connections.delete(uuid);
             }
@@ -275,22 +277,73 @@ function bind(a, node) {
     values(node, connection.properties);
 }
 function connectionNodes(connection) { return [...nodes.values()].filter(n => n.uuid === connection.uuid); }
-function send(connection, topic, payload, qos = 0) {
+function send(connection, topic, payload, qos = 0, onSent) {
     if (!connection.ready) throw new Error('Nicht verbunden; Befehl wurde verworfen');
-    connection.client.publish(topic, JSON.stringify(payload), { qos, retain: false }, err => {
-        if (connection.closed || !err) return;
-        for (const node of connectionNodes(connection)) fail(node, 'MQTT-Befehl konnte nicht gesendet werden');
+    const client = connection.client;
+    client.publish(topic, JSON.stringify(payload), { qos, retain: false }, err => {
+        if (connection.closed || !connection.ready || connection.client !== client) return;
+        if (err) {
+            for (const node of connectionNodes(connection)) fail(node, 'MQTT-Befehl konnte nicht gesendet werden');
+        } else onSent?.();
     });
 }
-function port(connection, cn, portName, properties = {}, qos = 0) {
+function port(connection, cn, portName, properties = {}, qos = 0, onSent) {
     send(connection, `da_ctrl/da-${connection.uuid}/to_ncp`, { cid: crypto.randomBytes(4).toString('hex'),
         time: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), type: 'command', cn, ct: 'mobile',
-        data: { portName, properties } }, qos);
+        data: { portName, properties } }, qos, onSent);
 }
 function snapshot(connection) {
     connection.lastSnapshot = Date.now();
     for (const name of ['Status', 'Config', 'filtRd']) port(connection, 'getPort', name);
     send(connection, `$aws/things/da-${connection.uuid}/shadow/get`, {});
+}
+// Read back after writes; never treat the cached value or a shadow desired state as confirmation.
+function clearVerification(connection) {
+    clearTimeout(connection.verificationTimer);
+    connection.verificationTimer = undefined;
+    connection.pending = undefined;
+}
+function verifyCommand(connection, key, expected) {
+    connection.pending ||= new Map();
+    connection.pending.set(key, { expected, requested: false });
+    clearTimeout(connection.verificationTimer);
+    let attempts = 0;
+    const poll = () => {
+        if (connection.closed || !connection.ready || !connection.pending?.size) return;
+        if (attempts++ >= 3) {
+            clearVerification(connection);
+            for (const node of connectionNodes(connection)) fail(node, 'Philips-Befehl nicht bestätigt: Gerätestatus fehlt oder weicht vom Sollwert ab');
+            return;
+        }
+        for (const pending of connection.pending.values()) pending.requested = true;
+        try { snapshot(connection); }
+        catch {
+            clearVerification(connection);
+            for (const node of connectionNodes(connection)) fail(node, 'Philips-Befehl nicht bestätigt: Gerätestatus fehlt oder weicht vom Sollwert ab');
+            return;
+        }
+        // MQTT mocks (and fast clients) may deliver the response during publish.
+        if (!connection.pending?.size) return;
+        connection.verificationTimer = setTimeout(poll, 4000);
+        connection.verificationTimer.unref?.();
+    };
+    connection.verificationTimer = setTimeout(poll, 1000);
+    connection.verificationTimer.unref?.();
+}
+function checkCommand(connection, properties) {
+    if (!connection.pending) return;
+    for (const [key, pending] of connection.pending) {
+        const actual = numeric(properties[key]);
+        if (!pending.requested || actual === undefined) continue;
+        const matches = key === 'D0310D' ? (actual > 0) === pending.expected : actual === pending.expected;
+        if (matches) connection.pending.delete(key);
+    }
+    if (connection.pending.size) return;
+    clearVerification(connection);
+    for (const node of connectionNodes(connection)) {
+        emit(node, 'error', '');
+        emit(node, 'status', 'Philips-Befehl durch Gerätestatus bestätigt');
+    }
 }
 // Some devices batch JSON objects without separators in one MQTT message.
 function decode(payload) {
@@ -355,6 +408,7 @@ function connect(a, connection) {
     const retry = () => {
         if (!active() || connection.retry) return;
         connection.ready = false;
+        clearVerification(connection);
         clearTimeout(connection.watchdog);
         for (const node of connectionNodes(connection)) status(node, false, 'Getrennt; verbinde erneut …');
         const delay = Math.min(300000, 30000 * 2 ** Math.min(connection.failures++, 4));
@@ -397,6 +451,7 @@ function connect(a, connection) {
                 if (!data.properties || typeof data.properties !== 'object' || Array.isArray(data.properties)) continue;
                 Object.assign(connection.properties, data.properties);
                 for (const node of connectionNodes(connection)) values(node, connection.properties);
+                checkCommand(connection, data.properties);
             }
         } catch { for (const node of connectionNodes(connection)) fail(node, 'Ungültige Philips-MQTT-Nachricht'); }
     });
@@ -588,14 +643,19 @@ module.exports = {
             if (handle === 'power' || handle === 'standbyMonitor') {
                 if (![true, false, 0, 1, '0', '1'].includes(value)) throw new Error('Ein/Aus muss 0 oder 1 sein');
                 const on = [true, 1, '1'].includes(value);
-                if (handle === 'power') send(connection, `$aws/things/da-${node.uuid}/shadow/update`, { state: { desired: { powerOn: on } } });
-                else port(connection, 'setPort', 'Control', { D03134: on ? 1 : 0 });
+                if (handle === 'power') send(connection, `$aws/things/da-${node.uuid}/shadow/update`, { state: { desired: { powerOn: on } } }, 0,
+                    () => verifyCommand(connection, 'D0310D', on));
+                else port(connection, 'setPort', 'Control', { D03134: on ? 1 : 0 }, 0,
+                    () => verifyCommand(connection, 'D03134', on ? 1 : 0));
             } else if (handle === 'mode') {
                 const mode = typeof value === 'string' && Object.hasOwn(MODES, value.toLowerCase()) ? MODES[value.toLowerCase()] : numeric(value);
                 if (!Object.values(MODES).includes(mode)) throw new Error('Modus muss 0, 1, 17 oder 18 sein (auto/medium/sleep/turbo)');
-                port(connection, 'setPort', 'Control', { D0310C: mode });
-            } else if (handle === 'resetFilterClean') port(connection, 'setPort', 'filtWr', { D0520D: 720 }, 1);
-            else if (handle === 'resetFilterReplace') port(connection, 'setPort', 'filtWr', { D0540E: 4800 }, 1);
+                port(connection, 'setPort', 'Control', { D0310C: mode }, 0,
+                    () => verifyCommand(connection, 'D0310C', mode));
+            } else if (handle === 'resetFilterClean') port(connection, 'setPort', 'filtWr', { D0520D: 720 }, 1,
+                () => verifyCommand(connection, 'D0520D', 720));
+            else if (handle === 'resetFilterReplace') port(connection, 'setPort', 'filtWr', { D0540E: 4800 }, 1,
+                () => verifyCommand(connection, 'D0540E', 4800));
             else {
                 if (connection.lastSnapshot && Date.now() - connection.lastSnapshot < 30000) return {};
                 snapshot(connection);
