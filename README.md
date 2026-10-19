@@ -649,7 +649,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.4**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.5**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -680,6 +680,15 @@ gespeicherte Fahrbefehle und Szenen werden dabei nicht wiederholt.
 Die Umsetzung orientiert sich an der [PowerView-Referenzimplementierung aiopvapi](https://github.com/sander76/aio-powerview-api).
 Gen 1/2 nutzen `/api`, Gen 3 `/home` mit eigener Befehlsstruktur. Die jeweiligen
 Positionswerte werden in Prozent umgerechnet. Gen 1 unterstützt keinen Stop-Befehl.
+Bei Gen 2/3 wird vor jedem gültigen direkten Fahr- oder Lamellenbefehl
+(Auf/Ab, Öffnen, Schließen, Position, Lamellenwinkel) zuerst ein separater Stop
+gesendet und dessen erfolgreiche HTTP-Antwort abgewartet. Erst danach folgt
+der neue Befehl; bei einem Stop-Fehler wird er verworfen. Schnell aufeinanderfolgende
+Befehle werden pro Node als vollständige Stop/Befehl-Paare nacheinander verarbeitet.
+Die Referenzimplementierung definiert keinen kombinierten Aufruf mit garantierter
+Stop-vor-Fahrt-Reihenfolge. Gen 1 fährt weiterhin ohne vorgeschalteten Stop.
+Szenenaktivierungen und reine Statusabfragen erhalten keinen vorgeschalteten Stop;
+Szenen können mehrere, auch dieser Node nicht zugeordnete Behänge betreffen.
 Lamellenbefehle werden anhand des Gerätetyps geprüft; bei Typen, die nur im
 abgesenkten Zustand kippen können, muss der Behang zuvor geschlossen sein.
 Bei mehrteiligen Behängen steuert der Positionseingang nur die primäre Schiene.
@@ -923,6 +932,10 @@ fälschlichen Unterdrückung bei `batteryStatus: 4`.
 
 PowerView ab 1.0.4: Stop verarbeitet 0 und 1, passend zu den richtungsabhängigen
 Stop-Telegrammen der Visu. Wiederholte Telegramme lösen erneut Stop aus.
+
+PowerView ab 1.0.5: Gen 2/3 senden vor direkten Fahr- und Lamellenbefehlen
+automatisch Stop. Stop und Folgebefehl werden pro Node sequenziell gesendet;
+ein fehlgeschlagener Stop verhindert den Folgebefehl.
 
 
 ### Globale Plugin-Aktionen

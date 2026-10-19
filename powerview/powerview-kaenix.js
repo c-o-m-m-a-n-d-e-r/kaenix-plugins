@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -195,14 +195,16 @@ function tiltMax(s, d) {
         : 1;
 }
 const parsePercentValue = (v) => {
-    if (v === null || v === undefined || typeof v === 'boolean') return undefined;
+    if (v === null || v === undefined || typeof v === 'boolean')
+        return undefined;
     const clean = String(v).replace('%', '').trim();
     if (clean === '') return undefined;
     const n = Number(clean);
     return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
 function parseBattery(s, d) {
-    if (!d || typeof d !== 'object') return { battery: undefined, warning: undefined };
+    if (!d || typeof d !== 'object')
+        return { battery: undefined, warning: undefined };
 
     // Explicit hardwired power supply (1 = hardwired, 12 = fixed hardwired)
     const powerSource = s.version === 3 ? d.powerType : d.batteryKind;
@@ -224,7 +226,9 @@ function parseBattery(s, d) {
             }
         }
         const statusStr = String(bat.status ?? '').toLowerCase();
-        if (['low', 'critical', 'warning', 'replace', '1'].includes(statusStr)) {
+        if (
+            ['low', 'critical', 'warning', 'replace', '1'].includes(statusStr)
+        ) {
             batWarn = 1;
         }
     } else {
@@ -234,7 +238,13 @@ function parseBattery(s, d) {
 
     // 2. Check root attributes (Gen 2/3 variants)
     if (batPct === undefined) {
-        for (const k of ['batteryPercentage', 'batteryPercent', 'battery_percent', 'batteryLevel', 'battery_level']) {
+        for (const k of [
+            'batteryPercentage',
+            'batteryPercent',
+            'battery_percent',
+            'batteryLevel',
+            'battery_level',
+        ]) {
             const parsed = parsePercentValue(d[k]);
             if (parsed !== undefined) {
                 batPct = parsed;
@@ -244,7 +254,11 @@ function parseBattery(s, d) {
     }
 
     // 3. Check batteryStrength (raw voltage, tenths of a volt, max typically 180-200)
-    if (batPct === undefined && numeric(d.batteryStrength) && Number(d.batteryStrength) >= 0) {
+    if (
+        batPct === undefined &&
+        numeric(d.batteryStrength) &&
+        Number(d.batteryStrength) >= 0
+    ) {
         const rawStrength = Number(d.batteryStrength);
         if (rawStrength > 100 || s.version < 3) {
             batPct = Math.min(100, Math.round((rawStrength / 180) * 100));
@@ -254,7 +268,11 @@ function parseBattery(s, d) {
     }
 
     // 4. Fallback via batteryStatus (0: 0%, 1: 20%, 2: 50%, 3/4: 100%)
-    if (d.batteryStatus !== undefined && d.batteryStatus !== null && d.batteryStatus !== '') {
+    if (
+        d.batteryStatus !== undefined &&
+        d.batteryStatus !== null &&
+        d.batteryStatus !== ''
+    ) {
         const st = Number(d.batteryStatus);
         if (st === 1) {
             batWarn = 1;
@@ -266,7 +284,11 @@ function parseBattery(s, d) {
             if (batPct === undefined) batPct = 50;
         } else if (st === 3 || st === 4) {
             if (batPct === undefined) batPct = 100;
-        } else if (['low', 'critical', 'warning'].includes(String(d.batteryStatus).toLowerCase())) {
+        } else if (
+            ['low', 'critical', 'warning'].includes(
+                String(d.batteryStatus).toLowerCase(),
+            )
+        ) {
             batWarn = 1;
         }
     }
@@ -282,7 +304,10 @@ function parseBattery(s, d) {
         }
     }
 
-    if (batWarn === undefined && (d.batteryStatus !== undefined || batPct !== undefined)) {
+    if (
+        batWarn === undefined &&
+        (d.batteryStatus !== undefined || batPct !== undefined)
+    ) {
         batWarn = 0;
     }
 
@@ -369,6 +394,18 @@ function encodePositions(version, targets) {
     });
     return positions;
 }
+async function stopShade(s) {
+    if (s.version === 1)
+        throw new Error('Stop wird von PowerView Gen 1 nicht unterstützt');
+    const id = encodeURIComponent(s.device.id);
+    await request(
+        s,
+        'PUT',
+        s.version === 3 ? `/home/shades/stop?ids=${id}` : `/api/shades/${id}`,
+        s.version === 3 ? undefined : { shade: { motion: 'stop' } },
+    );
+    estimateMotion(s, 0);
+}
 async function command(s, handle, value) {
     await detect(s);
     if (handle === 'scene') {
@@ -400,17 +437,7 @@ async function command(s, handle, value) {
         id = encodeURIComponent(d.id),
         cap = capability(d);
     if (handle === 'stop') {
-        if (s.version === 1)
-            throw new Error('Stop wird von PowerView Gen 1 nicht unterstützt');
-        await request(
-            s,
-            'PUT',
-            s.version === 3
-                ? `/home/shades/stop?ids=${id}`
-                : `/api/shades/${id}`,
-            s.version === 3 ? undefined : { shade: { motion: 'stop' } },
-        );
-        estimateMotion(s, 0);
+        await stopShade(s);
     } else {
         const p = axes(s, d);
         const tilt = handle === 'slats';
@@ -464,6 +491,10 @@ async function command(s, handle, value) {
             targets.tilt = s.version === 3 ? 1 : position === 0 ? 0.5 : 0;
         }
         const positions = encodePositions(s.version, targets);
+        // No ordered stop-and-move operation is defined by the reference API.
+        // Keep both requests in this queue entry and abort if stopping fails.
+        // Gen 1 has no Stop support, so retain its existing movement behavior.
+        if (s.version !== 1) await stopShade(s);
         await request(
             s,
             'PUT',
