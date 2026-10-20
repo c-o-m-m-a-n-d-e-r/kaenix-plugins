@@ -314,7 +314,7 @@ module.exports = {
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
-| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 über Air+ Cloud/MQTT mit Anmeldebuttons in globalen Einstellungen; [Dokumentation](philips-air-plus/README.md) |
+| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
 | **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
 
 ### BWM – Konfiguration
@@ -984,3 +984,59 @@ fehlender separater Rückmeldung die Befehlsadresse beobachtet.
 Benötigt die Backend-Helfer `getCentralWidgets`, `getCentralDpt`,
 `readCentralAddress`, `writeCentralAddress` und Frontend-Unterstützung für
 `dynamicInputs` sowie `category-widget-checklist` aus dieser Änderung.
+
+## Philips Air Plus
+
+`philips-air-plus/philips-air-plus-kaenix.js`, Version **1.0.4**, Kategorie Geräte.
+Unterstützt den AC0651/10 und die PureProtect Quiet 2200 Series **AC2220/10**.
+Beide Geräte bleiben im selben Air+-Konto; das Plugin führt das ältere
+DaConnect-Verzeichnis und das zusätzliche Air+/MxChip-Geräteverzeichnis zusammen.
+Home Assistant und ein eigener MQTT-Broker sind nicht erforderlich.
+
+Nach dem Update von 1.0.3 einmal in den globalen Plugin-Einstellungen abmelden
+und per E-Mail-Code erneut anmelden. Dabei wird die von Philips bestätigte
+Konto-ID für den zusätzlichen Geräteabruf gespeichert. Der neue Button
+**Geräteliste aktualisieren** lädt beide Verzeichnisse ohne neue Code-Anforderung.
+Die bestehende Air+-Einrichtung der Geräte bleibt erhalten.
+
+Pro Luftreiniger eine Node anlegen und die jeweilige **Geräte-ID** eintragen.
+Auch eine vorher automatisch zugeordnete Node benötigt eine explizite ID, sobald
+mehrere Geräte erkannt werden. Bestehende UUIDs und das Konfigurationsfeld
+`deviceUuid` bleiben gültig; neue Geräte können IDs ohne Bindestriche verwenden.
+Die Geräteliste liefert `uuid`, `name`, `backend` und beim Air+-Verzeichnis `model`.
+
+| Eingang | AC0651/10 | AC2220/10 |
+|---|---|---|
+| `power` | 0/1, aus/ein | 0/1, aus/ein |
+| `mode` | 0 Auto, 1 Mittel, 17 Schlaf, 18 Turbo | 0 Auto, 1–5 manuelle Stufen, 17 Schlaf, 18 Turbo, 19 Mittel |
+| Modus als Text | `auto`, `medium`, `sleep`, `turbo` | Zusätzlich `speed1` bis `speed5`; `medium` wird auf 19 umgesetzt |
+| `standbyMonitor` | 0/1 | Nicht freigegeben |
+| `resetFilterClean`, `resetFilterReplace` | Nach Reinigung/Filtertausch, 720/4800 h | Nicht freigegeben; keine bestätigten Cloud-Reset-Befehle |
+| `triggerStatus`, `reconnect` | Status abrufen / Geräte neu laden | Status abrufen / Geräte neu laden |
+
+Die Ausgänge liefern Modell, Ein/Aus, Modus, Lüfterstufe, PM2.5, Allergenindex
+und Filter-Restwerte, soweit das Gerät sie meldet. Filterprozente verwenden
+ausschließlich gemeldete Nominalzeiten. Beim AC2220 stammt Ein/Aus aus `D03102`;
+die Lüfterstufe wird nicht als Ein/Aus-Ersatz verwendet. AWS-Sollwerte bestätigen
+keinen Gerätestatus. Das Plugin prüft Befehle durch anschließende Statusabfragen
+und meldet fehlende oder abweichende Rückmeldungen als Fehler.
+
+Air+-JWT und signierte MQTT-URLs bleiben im Arbeitsspeicher. Jeder Reconnect
+ruft neue Verbindungsdaten ab. Konto-ID und bisherige OAuth-Sitzung liegen intern
+in der kaenix-Datenbank. Fehler eines Geräteverzeichnisses sperren die Geräte
+des anderen Verzeichnisses nicht. Andere Modelle werden nur aufgelistet und
+nicht zur Steuerung freigegeben.
+
+DE/EN-Texte erfordern ein aktualisiertes, neu gebautes Frontend. Der neue Button
+nutzt die vorhandene Plugin-Aktionsschnittstelle. Admin-Aktionen bleiben am
+Remote-Gateway gesperrt; die Visu steuert Geräte über bestehende KNX-Adressen.
+Zusätzliche Gateway-Routen oder Änderungen an Safe-Area, Header und Blur sind
+nicht erforderlich.
+
+Die AC2220-Cloud-Anbindung wurde mit simulierten Endpunkten geprüft; der Test am
+echten Gerät steht noch aus. Protokollreferenzen sind
+[NikGro/philips-air-plus-homeassistant](https://github.com/NikGro/philips-air-plus-homeassistant/tree/45c68df11fa8bb4bc1b851943a9912886a84a3e3)
+und [kwesolowski/node-red-contrib-philips-airplus](https://github.com/kwesolowski/node-red-contrib-philips-airplus/blob/acbffa3683e728512dde7da824184586d3f4f9f9/docs/api-reverse-engineered.md).
+Die AC2220-Feldzuordnung wurde mit der AC2210/AC2220/AC2221-Modellfamilie von
+[tinkerologie/ha-philips-airpurifier](https://github.com/tinkerologie/ha-philips-airpurifier/blob/8cf8cb83967357ec7ddfbd8f8a6115d31f26a2d4/custom_components/philips_airpurifier/device_models.py)
+abgeglichen. Lizenzhinweise stehen in der Plugin-Datei.

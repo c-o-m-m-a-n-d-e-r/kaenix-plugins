@@ -1,11 +1,15 @@
 /**
  * @plugin Philips Air Plus
- * @version 1.0.3
+ * @version 1.0.4
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
  * Protocol/authentication adapted from NikGro/philips-air-plus-homeassistant,
  * revision e091838cbea4444899694431f57bbf78992c834e (MIT).
+ * Additional Air+ API/shadow protocol: same project, revision
+ * 45c68df11fa8bb4bc1b851943a9912886a84a3e3 (MIT), and
+ * kwesolowski/node-red-contrib-philips-airplus, revision
+ * acbffa3683e728512dde7da824184586d3f4f9f9 (MIT).
  * Copyright (c) 2025-2026 ShorMeneses
  * Portions copyright (c) 2026 Markus Stephany
  *
@@ -38,6 +42,16 @@ const SCOPES = 'openid email profile address DI.Account.read DI.Account.write DI
     + 'DI.GeneralConsent.read subscriptions profile_extended consents DI.AccountSubscription.read DI.AccountSubscription.write';
 const API = 'https://prod.eu-da.iot.versuni.com/api/da/user/self';
 const MODES = { auto: 0, medium: 1, sleep: 17, turbo: 18 };
+const AIR_API = 'https://www.api.air.philips.com/';
+const AIR_APP = '9fd505fa9c7111e9a1e3061302926720';
+// Public application signing value documented in the pinned protocol reference.
+// This is not a user's account credential. Account IDs and tokens stay private.
+const AIR_SIGNING = 'a_zagf9sb2dpbiImtycwibgfzd6nksd65m';
+const IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/;
+const UUID = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
+const AIR_MODES = { auto: 0, medium: 19, sleep: 17, turbo: 18,
+    speed1: 1, speed2: 2, speed3: 3, speed4: 4, speed5: 5 };
+const AIR_UPGRADE = 'Philips Air+: Für die Erkennung neuer Geräte einmal abmelden und per E-Mail-Code erneut anmelden';
 const nodes = new Map();
 let account;
 let mqtt;
@@ -83,7 +97,7 @@ function closeConnections(a) {
         connection.client?.end(true);
     }
     a.connections.clear();
-    for (const node of nodes.values()) status(node, false);
+    for (const node of nodes.values()) { node.uuid = undefined; status(node, false); }
 }
 function stopAccount(a) {
     clearTimeout(a.refreshTimer);
@@ -167,7 +181,7 @@ function saveTokens(a, result) {
 }
 function persist(a) {
     const context = a.context;
-    if (!context || context.setGlobalSetting('session', JSON.stringify({ email: a.email, ...a.tokens, otpAt: a.otpAt,
+    if (!context || context.setGlobalSetting('session', JSON.stringify({ email: a.email, ...a.tokens, otpAt: a.otpAt, airUid: a.airUid,
         ...(a.vToken ? { vToken: a.vToken, otpAt: a.otpAt } : {}) })) === false) {
         throw new Error('Philips-Sitzung konnte nicht gespeichert werden');
     }
@@ -203,7 +217,62 @@ async function login(a, code) {
     // A new login must not inherit the previous account's refresh token.
     a.tokens = undefined;
     a.vToken = undefined;
+    a.airUid = typeof verification.UID === 'string' && IDENTIFIER.test(verification.UID) ? verification.UID : undefined;
+    a.airToken = undefined;
     saveTokens(a, tokens);
+}
+
+// The same Air+ account has a separate MxChip device registry. Its account ID
+// comes from the verified OTP response, never from a manually entered device ID.
+async function airRequest(a, suffix, body, headers = {}) {
+    const result = await request(a, AIR_API + suffix, {
+        method: body === undefined ? 'GET' : 'POST',
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...headers },
+    }, false, 'Philips Air+');
+    if (result.meta?.code !== 0) {
+        const error = new Error('Philips Air+: Anfrage abgelehnt');
+        error.auth = [10001, 10002].includes(result.meta?.code);
+        throw error;
+    }
+    return result.data;
+}
+async function airToken(a) {
+    if (a.airToken?.expiresAt > Date.now() + 15 * 60 * 1000) return a.airToken.value;
+    if (a.airTokenRequest) return a.airTokenRequest;
+    a.airTokenRequest = (async () => {
+        let clock = await airRequest(a, 'device/serverTime/');
+        if (typeof clock === 'string') {
+            try { clock = JSON.parse(clock); } catch { clock = null; }
+        }
+        const timestamp = String(clock?.timestamp2 ?? '');
+        if (!/^\d{1,20}$/.test(timestamp)) throw new Error('Philips Air+: ungültige Serverzeit');
+        const username = `PHILIPS:${a.airUid}`;
+        // URLSearchParams follows the app's Java form encoding (including spaces).
+        const canonical = new URLSearchParams({ app_id: AIR_APP, timestamp, username }).toString();
+        const inner = crypto.createHmac('sha256', AIR_SIGNING).update(canonical).digest('hex');
+        const signature = crypto.createHmac('sha256', username).update(inner).digest('hex');
+        const data = await airRequest(a, 'enduser/v2/getToken/', { app_id: AIR_APP, timestamp, username }, { Signature: signature });
+        let expiry;
+        try { expiry = JSON.parse(Buffer.from(data.token.split('.')[1], 'base64url').toString('utf8')).exp; } catch { /* Invalid token */ }
+        if (typeof expiry !== 'number' || !Number.isFinite(expiry) || expiry * 1000 <= Date.now()) {
+            throw new Error('Philips Air+: ungültiger Sitzungstoken');
+        }
+        a.airToken = { value: data.token, expiresAt: expiry * 1000 };
+        return data.token;
+    })();
+    try { return await a.airTokenRequest; }
+    finally { a.airTokenRequest = undefined; }
+}
+async function airApi(a, suffix, body) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const token = await airToken(a);
+        try { return await airRequest(a, suffix, body, { Authorization: `jwt ${token}` }); }
+        catch (error) {
+            if (!error.auth || attempt) throw error;
+            if (a.airToken?.value === token) a.airToken = undefined;
+        }
+    }
 }
 function scheduleRefresh(a, delay) {
     clearTimeout(a.refreshTimer);
@@ -230,20 +299,60 @@ async function refresh(a) {
 }
 async function discover(a) {
     closeConnections(a);
-    const raw = await api(a, '/device');
-    const devices = Array.isArray(raw) ? raw : raw.devices
-        || Object.values(raw).find(v => Array.isArray(v) && v.some(d => d?.uuid)) || [];
-    a.devices = devices.filter(d => typeof (d?.uuid || d?.id) === 'string').map(d => ({
-        uuid: (d.uuid || d.id).replace(/^da-/, ''), name: String(d.name || d.deviceName || d.friendlyName || 'Philips Air+'),
-    })).filter(d => /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(d.uuid));
+    a.devices = undefined;
+    const found = new Map(), warnings = [];
+    const registryKey = id => /^[a-f\d]{32}$/i.test(id.replace(/-/g, '')) ? id.replace(/-/g, '').toLowerCase() : id;
+    let successes = 0;
+    try {
+        const raw = await api(a, '/device');
+        const devices = Array.isArray(raw) ? raw : raw.devices
+            || Object.values(raw).find(v => Array.isArray(v) && v.some(d => d?.uuid)) || [];
+        if (!Array.isArray(devices)) throw new Error('Philips-Cloud: ungültige Antwort');
+        for (const d of devices) {
+            const uuid = typeof (d?.uuid || d?.id) === 'string' ? (d.uuid || d.id).replace(/^da-/, '') : '';
+            if (UUID.test(uuid)) found.set(registryKey(uuid), { uuid, name: String(d.name || d.deviceName || d.friendlyName || 'Philips Air+'), backend: 'legacy' });
+        }
+        if (nodes.size && found.size) {
+            const signature = await api(a, '/signature');
+            const user = await api(a, '');
+            if (!signature.signature || !user.id) throw new Error('Philips-Cloud: MQTT-Signatur oder Benutzer-ID fehlt');
+            a.signature = signature.signature;
+            a.userId = String(user.id).replace(/^([a-f\d]{8})([a-f\d]{4})([a-f\d]{4})([a-f\d]{4})([a-f\d]{12})$/i, '$1-$2-$3-$4-$5');
+        }
+        successes++;
+    } catch (error) {
+        if (account !== a) throw error;
+        found.clear();
+        warnings.push(error.message);
+    }
+    if (a.airUid) {
+        try {
+            const devices = await airApi(a, 'enduser/deviceList/');
+            if (!Array.isArray(devices) || devices.some(d => typeof d?.device_id !== 'string' || !IDENTIFIER.test(d.device_id)
+                || !d.device_info || typeof d.device_info !== 'object' || Array.isArray(d.device_info))) {
+                throw new Error('Philips Air+: ungültige Geräteliste');
+            }
+            for (const d of devices) {
+                const info = d.device_info;
+                const key = registryKey(d.device_id);
+                if (found.has(key) && info.modelid !== 'AC2220/10') continue;
+                found.set(key, { uuid: d.device_id, backend: 'air',
+                    name: String(info.name || info.device_alias || 'Philips Air+'),
+                    model: typeof info.modelid === 'string' ? info.modelid : '' });
+            }
+            successes++;
+        } catch (error) {
+            if (account !== a) throw error;
+            warnings.push(error.message);
+        }
+    } else warnings.push(AIR_UPGRADE);
+    if (!successes) throw new Error(warnings[0]);
+    a.devices = [...found.values()];
+    a.discoveryWarning = warnings.join('; ');
     if (!nodes.size) return;
-    const signature = await api(a, '/signature');
-    const user = await api(a, '');
-    if (!signature.signature || !user.id) throw new Error('Philips-Cloud: MQTT-Signatur oder Benutzer-ID fehlt');
-    a.signature = signature.signature;
-    a.userId = String(user.id).replace(/^([a-f\d]{8})([a-f\d]{4})([a-f\d]{4})([a-f\d]{4})([a-f\d]{12})$/i, '$1-$2-$3-$4-$5');
     for (const node of nodes.values()) bind(a, node);
-    scheduleRefresh(a);
+    scheduleRefresh(a, warnings.length && a.airUid ? 5 * 60 * 1000 : undefined);
+    if (a.discoveryWarning) notify(a, a.discoveryWarning, true);
 }
 function run(a, task) {
     if (a.busy) { notify(a, 'Philips-Anfrage läuft bereits', true); return; }
@@ -263,13 +372,14 @@ function bind(a, node) {
     emit(node, 'devices', JSON.stringify(a.devices));
     const chosen = node.configuredUuid || (a.devices.length === 1 ? a.devices[0].uuid : '');
     if (!chosen || !a.devices.some(d => d.uuid === chosen)) {
-        status(node, false, 'Geräte-UUID auswählen (siehe Geräte-Liste)');
+        status(node, false, 'Geräte-ID auswählen (siehe Geräte-Liste)');
         return;
     }
     node.uuid = chosen;
     let connection = a.connections.get(chosen);
     if (!connection) {
-        connection = { uuid: chosen, properties: {}, ready: false, failures: 0 };
+        const device = a.devices.find(d => d.uuid === chosen);
+        connection = { uuid: chosen, backend: device.backend, model: device.model, properties: {}, ready: false, failures: 0, version: -1 };
         a.connections.set(chosen, connection);
         connect(a, connection);
     }
@@ -294,8 +404,20 @@ function port(connection, cn, portName, properties = {}, qos = 0, onSent) {
 }
 function snapshot(connection) {
     connection.lastSnapshot = Date.now();
+    if (connection.backend === 'air') {
+        connection.readToken = crypto.randomBytes(12).toString('hex');
+        send(connection, `$aws/things/${connection.uuid}/shadow/get`, { clientToken: connection.readToken }, 1);
+        return;
+    }
     for (const name of ['Status', 'Config', 'filtRd']) port(connection, 'getPort', name);
     send(connection, `$aws/things/da-${connection.uuid}/shadow/get`, {});
+}
+function airControl(connection, desired) {
+    connection.writeToken = crypto.randomBytes(12).toString('hex');
+    const [key, expected] = Object.entries(desired)[0];
+    send(connection, `$aws/things/${connection.uuid}/shadow/update`, {
+        clientToken: connection.writeToken, state: { desired },
+    }, 1, () => verifyCommand(connection, key, expected));
 }
 // Read back after writes; never treat the cached value or a shadow desired state as confirmation.
 function clearVerification(connection) {
@@ -378,13 +500,14 @@ function numeric(value) {
     return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 function values(node, properties) {
+    const air = account?.connections.get(node.uuid)?.backend === 'air';
     if (typeof properties.ctn === 'string') emit(node, 'model', properties.ctn);
     for (const [handle, key] of Object.entries({ mode: 'D0310C', fanLevel: 'D0310D', pm25: 'D03221',
         allergenIndex: 'D03120', standbyMonitor: 'D03134', filterCleanHours: 'D0520D', filterReplaceHours: 'D0540E' })) {
         const value = numeric(properties[key]);
         if (value !== undefined) {
             emit(node, handle, value);
-            if (handle === 'fanLevel') emit(node, 'power', value === 0 ? 0 : 1);
+            if (handle === 'fanLevel' && !air) emit(node, 'power', value === 0 ? 0 : 1);
         }
     }
     for (const [handle, nominal, remaining] of [
@@ -392,18 +515,87 @@ function values(node, properties) {
         const total = numeric(properties[nominal]), hours = numeric(properties[remaining]);
         if (total > 0 && hours !== undefined) emit(node, handle, Math.min(100, Math.round(hours / total * 1000) / 10));
     }
+    if (air) {
+        const power = numeric(properties.D03102);
+        if ([0, 1].includes(power)) emit(node, 'power', power);
+    }
 }
-function connect(a, connection) {
+function airTopics(connection) {
+    return ['/get/accepted', '/get/rejected', '/update/documents', '/update/accepted', '/update/rejected']
+        .map(suffix => `$aws/things/${connection.uuid}/shadow${suffix}`);
+}
+async function prepareAirConnection(a, connection) {
+    const active = () => account === a && !connection.closed && a.connections.get(connection.uuid) === connection;
+    try {
+        const data = await airApi(a, 'enduser/v2/mqttInfo/', { device_id: [connection.uuid] });
+        if (!active()) return;
+        const matches = Array.isArray(data?.mqttinfos) ? data.mqttinfos.filter(d => d?.device_id === connection.uuid) : [];
+        const info = matches.length === 1 ? matches[0] : null;
+        if (!info || typeof info.endpoint !== 'string' || !/^[a-z0-9-]+-ats\.iot\.[a-z0-9-]+\.amazonaws\.com$/.test(info.endpoint)
+            || typeof info.path !== 'string' || !info.path.startsWith('/mqtt?') || info.path.length > 8192 || /[\r\n#]/.test(info.path)
+            || typeof info.client_id !== 'string' || !IDENTIFIER.test(info.client_id)) {
+            throw new Error('Philips Air+: ungültige MQTT-Verbindungsdaten');
+        }
+        // Use exactly the account-owned device's server-issued client ID/path.
+        // Every reconnect retrieves a new signed URL rather than reusing it.
+        connect(a, connection, info);
+    } catch (error) {
+        if (!active()) return;
+        for (const node of connectionNodes(connection)) {
+            status(node, false, 'Getrennt; verbinde erneut …');
+            fail(node, error.message);
+        }
+        connection.retry = setTimeout(() => {
+            connection.retry = undefined;
+            if (active()) connect(a, connection);
+        }, Math.min(300000, 30000 * 2 ** Math.min(connection.failures++, 4)));
+        connection.retry.unref?.();
+    }
+}
+function receiveShadow(connection, topic, message) {
+    const prefix = `$aws/things/${connection.uuid}/shadow`;
+    if (topic.endsWith('/rejected')) {
+        if (message.clientToken && [connection.readToken, connection.writeToken].includes(message.clientToken)) {
+            clearVerification(connection);
+            for (const node of connectionNodes(connection)) fail(node, 'Philips Air+: Gerätestatus oder Befehl abgelehnt');
+        }
+        return;
+    }
+    const document = topic === `${prefix}/update/documents` ? message.current : message;
+    const reported = document?.state?.reported;
+    if (!reported || typeof reported !== 'object' || Array.isArray(reported)
+        || !Number.isSafeInteger(document.version) || document.version < connection.version) return;
+    const full = topic === `${prefix}/get/accepted` || topic === `${prefix}/update/documents`;
+    const properties = full ? {} : { ...connection.properties };
+    for (const [key, value] of Object.entries(reported)) {
+        if (value === null) delete properties[key];
+        else if (/^D[0-9A-F]{5}$/.test(key) || key === 'ctn') properties[key] = value;
+    }
+    connection.version = document.version;
+    connection.properties = properties;
+    // Registry metadata identifies the model even when the shadow omits ctn.
+    if (!properties.ctn && connection.model) properties.ctn = connection.model;
+    for (const node of connectionNodes(connection)) values(node, properties);
+    // Only a response to our fresh read verifies a command. Desired states and
+    // update acknowledgements are not evidence that the purifier applied it.
+    if (topic === `${prefix}/get/accepted` && message.clientToken === connection.readToken) checkCommand(connection, reported);
+}
+function connect(a, connection, info) {
+    if (connection.backend === 'air' && !info) { void prepareAirConnection(a, connection); return; }
     const active = () => account === a && !connection.closed && a.connections.get(connection.uuid) === connection
         && connection.client === client && !connection.retry;
-    const client = getMqtt().connect('wss://ats.prod.eu-da.iot.versuni.com:443/mqtt', {
-        clientId: `${a.userId}_${connection.uuid}_kaenix_${a.instance}`, protocolVersion: 4,
+    const options = {
+        clientId: info ? info.client_id : `${a.userId}_${connection.uuid}_kaenix_${a.instance}`, protocolVersion: 4,
         clean: true, keepalive: 60, connectTimeout: 20000, reconnectPeriod: 0,
         resubscribe: false, queueQoSZero: false,
-        wsOptions: { headers: { 'x-amz-customauthorizer-name': 'CustomAuthorizer',
-            'x-amz-customauthorizer-signature': a.signature, tenant: 'da', 'content-type': 'application/json',
-            'token-header': `Bearer ${a.tokens.access_token}` } },
-    });
+    };
+    if (!info) options.wsOptions = { headers: { 'x-amz-customauthorizer-name': 'CustomAuthorizer',
+        'x-amz-customauthorizer-signature': a.signature, tenant: 'da', 'content-type': 'application/json',
+        'token-header': `Bearer ${a.tokens.access_token}` } };
+    const library = getMqtt();
+    let client;
+    try { client = library.connect(info ? `wss://${info.endpoint}:443${info.path}` : 'wss://ats.prod.eu-da.iot.versuni.com:443/mqtt', options); }
+    catch { throw new Error('Philips-MQTT-Verbindungsfehler'); }
     connection.client = client;
     const retry = () => {
         if (!active() || connection.retry) return;
@@ -415,7 +607,7 @@ function connect(a, connection) {
         connection.retry = setTimeout(() => {
             connection.retry = undefined;
             if (!active()) return;
-            if (a.tokens.expiresAt < Date.now() + 60000) run(a, async () => { await refresh(a); await discover(a); });
+            if (connection.backend !== 'air' && a.tokens.expiresAt < Date.now() + 60000) run(a, async () => { await refresh(a); await discover(a); });
             else connect(a, connection);
         }, delay);
         connection.retry.unref?.();
@@ -424,16 +616,17 @@ function connect(a, connection) {
     connection.watchdog = setTimeout(retry, 25000);
     connection.watchdog.unref?.();
     const inbound = `da_ctrl/da-${connection.uuid}/from_ncp`;
+    const topics = info ? airTopics(connection) : inbound;
     client.on('connect', () => {
         if (!active()) return;
-        client.subscribe(inbound, { qos: 0 }, (err, granted) => {
+        client.subscribe(topics, { qos: info ? 1 : 0 }, (err, granted) => {
             if (!active()) return;
-            if (err || !granted?.length || granted.some(g => g.qos > 2)) { retry(); return; }
+            if (err || granted?.length !== (info ? topics.length : 1) || granted.some(g => g.qos > 2)) { retry(); return; }
             clearTimeout(connection.watchdog);
             connection.ready = true;
             connection.failures = 0;
             for (const node of connectionNodes(connection)) { status(node, true, 'Verbunden'); emit(node, 'error', ''); }
-            snapshot(connection);
+            try { snapshot(connection); } catch { retry(); }
         });
     });
     client.on('close', retry);
@@ -443,9 +636,10 @@ function connect(a, connection) {
         retry();
     });
     client.on('message', (topic, payload) => {
-        if (!active() || topic !== inbound) return;
+        if (!active() || (info ? !topics.includes(topic) : topic !== inbound)) return;
         try {
             for (const message of decode(payload)) {
+                if (info) { receiveShadow(connection, topic, message); continue; }
                 const data = message.data;
                 if (!data || Array.isArray(data) || ![undefined, 'Status', 'Config', 'filtRd'].includes(data.portName)) continue;
                 if (!data.properties || typeof data.properties !== 'object' || Array.isArray(data.properties)) continue;
@@ -474,6 +668,7 @@ function ensureAccount(context) {
         try {
             const saved = JSON.parse(stored);
             if (saved.email === email) {
+                if (typeof saved.airUid === 'string' && IDENTIFIER.test(saved.airUid)) account.airUid = saved.airUid;
                 if (saved.access_token) account.tokens = { access_token: saved.access_token,
                     refresh_token: saved.refresh_token, expiresAt: saved.expiresAt };
                 if (Number.isFinite(saved.otpAt)) account.otpAt = saved.otpAt;
@@ -488,7 +683,7 @@ function ensureAccount(context) {
     return account;
 }
 async function globalAction(action, values, context) {
-    if (!['requestCode', 'verifyCode', 'logout'].includes(action)) throw new Error('Unbekannte Philips-Aktion');
+    if (!['requestCode', 'verifyCode', 'refreshDevices', 'logout'].includes(action)) throw new Error('Unbekannte Philips-Aktion');
     if (action === 'logout') {
         if (account?.busy) throw new Error('Philips-Anfrage läuft bereits; bitte warten');
         if (context.setGlobalSetting('session', '') === false) throw new Error('Abmelden konnte nicht gespeichert werden');
@@ -500,6 +695,12 @@ async function globalAction(action, values, context) {
     if (a.busy) throw new Error('Philips-Anfrage läuft bereits; bitte warten');
     a.busy = true;
     try {
+        if (action === 'refreshDevices') {
+            if (!a.tokens) throw new Error('Zuerst per E-Mail-Code anmelden');
+            if (!(a.tokens.expiresAt > Date.now() + 60000)) await refresh(a);
+            await discover(a);
+            return { message: a.discoveryWarning || 'Geräteliste aktualisiert', signedIn: true, devices: a.devices };
+        }
         if (action === 'requestCode') {
             if (a.otpAt && Date.now() - a.otpAt < 60000) throw new Error('Bitte mindestens 60 Sekunden vor einem neuen E-Mail-Code warten');
             a.otpAt = Date.now();
@@ -526,7 +727,7 @@ async function globalAction(action, values, context) {
             scheduleRefresh(a, 5 * 60 * 1000);
             return { message: `Anmeldung erfolgreich. Geräteabruf fehlgeschlagen: ${error.message}`, devices: [], signedIn: true };
         }
-        const message = a.devices.length ? 'Anmeldung erfolgreich' : 'Anmeldung erfolgreich, aber keine Air+-Geräte gefunden. Konto in der offiziellen App prüfen.';
+        const message = a.discoveryWarning || (a.devices.length ? 'Anmeldung erfolgreich' : 'Anmeldung erfolgreich, aber keine Air+-Geräte gefunden. Konto in der offiziellen App prüfen.');
         notify(a, message);
         context.info?.('Philips: Anmeldung erfolgreich');
         return { message, signedIn: true, devices: a.devices };
@@ -547,7 +748,7 @@ function getGlobalUiState(settings) {
     return {
         phase,
         readOnlyKeys: phase === 'unpaired' ? [] : ['email'],
-        visibleActionKeys: phase === 'signedIn' ? ['logout']
+        visibleActionKeys: phase === 'signedIn' ? ['refreshDevices', 'logout']
             : phase === 'codeRequested' ? ['verifyCode', 'requestCode', 'logout'] : ['requestCode'],
         hideSave: true,
     };
@@ -555,7 +756,7 @@ function getGlobalUiState(settings) {
 
 module.exports = {
     type: 'philips-air-plus', label: 'Philips Air Plus', category: 'Geräte', color: '#f97316',
-    description: 'Philips AC0651/10 über Air+ Cloud/MQTT steuern. Anmeldung per E-Mail-Code, Live-Sensoren und Filterstatus.',
+    description: 'Philips AC0651/10 und AC2220/10 über Air+ Cloud/MQTT steuern. Anmeldung per E-Mail-Code, Live-Sensoren und Filterstatus.',
     globalSettings: [
         { key: 'email', label: 'Philips Air+ Konto (E-Mail)', type: 'text' },
     ],
@@ -566,15 +767,16 @@ module.exports = {
                 inputMode: 'numeric', autoComplete: 'one-time-code' },
         ] },
         { key: 'logout', label: 'Abmelden' },
+        { key: 'refreshDevices', label: 'Geräteliste aktualisieren' },
     ],
     handleGlobalAction: globalAction,
     getGlobalUiState,
     config: [
-        { key: 'deviceUuid', label: 'Geräte-UUID (leer bei genau einem Gerät)', type: 'text' },
+        { key: 'deviceUuid', label: 'Geräte-ID (leer bei genau einem Gerät)', type: 'text' },
     ],
     inputs: [
         { handle: 'power', label: 'Ein/Aus (1/0)' },
-        { handle: 'mode', label: 'Modus (0 Auto, 1 Mittel, 17 Schlaf, 18 Turbo)' },
+        { handle: 'mode', label: 'Modus (modellabhängig, siehe Plugin-Dokumentation)' },
         { handle: 'standbyMonitor', label: 'Standby-Monitor (1/0)' },
         { handle: 'triggerStatus', label: 'Status abfragen' },
         { handle: 'resetFilterClean', label: 'Filter gereinigt (Trigger)' },
@@ -603,9 +805,9 @@ module.exports = {
         try {
             const a = ensureAccount(context);
             const configuredUuid = String(data.deviceUuid || '').trim().replace(/^da-/, '');
-            if (configuredUuid && !/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(configuredUuid)) {
+            if (configuredUuid && !IDENTIFIER.test(configuredUuid)) {
                 disposeNode(id);
-                throw new Error('Ungültige Geräte-UUID');
+                throw new Error('Ungültige Geräte-ID');
             }
             let node = nodes.get(id);
             if (node && node.configuredUuid !== configuredUuid) { disposeNode(id, true); node = undefined; }
@@ -637,20 +839,30 @@ module.exports = {
             if (['triggerStatus', 'resetFilterClean', 'resetFilterReplace'].includes(handle) && !pulse) return {};
             const connection = a.connections.get(node.uuid);
             if (!connection?.ready) throw new Error('Nicht verbunden; Befehl wurde verworfen');
-            if (connection.properties.ctn !== 'AC0651/10' && handle !== 'triggerStatus') {
-                throw new Error('Steuerung erst nach Modell-Rückmeldung AC0651/10 möglich');
+            const air = connection.backend === 'air';
+            const model = connection.properties.ctn || (air ? connection.model : '');
+            if (handle !== 'triggerStatus' && (air ? model !== 'AC2220/10' : model !== 'AC0651/10')) {
+                throw new Error('Philips: Modell wird für diese Verbindung nicht unterstützt oder noch nicht gemeldet');
+            }
+            if (air && ['standbyMonitor', 'resetFilterClean', 'resetFilterReplace'].includes(handle)) {
+                throw new Error('Philips AC2220/10: Standby-Monitor und Filter-Reset werden nicht unterstützt');
             }
             if (handle === 'power' || handle === 'standbyMonitor') {
                 if (![true, false, 0, 1, '0', '1'].includes(value)) throw new Error('Ein/Aus muss 0 oder 1 sein');
                 const on = [true, 1, '1'].includes(value);
-                if (handle === 'power') send(connection, `$aws/things/da-${node.uuid}/shadow/update`, { state: { desired: { powerOn: on } } }, 0,
+                if (air) airControl(connection, { D03102: on ? 1 : 0 });
+                else if (handle === 'power') send(connection, `$aws/things/da-${node.uuid}/shadow/update`, { state: { desired: { powerOn: on } } }, 0,
                     () => verifyCommand(connection, 'D0310D', on));
                 else port(connection, 'setPort', 'Control', { D03134: on ? 1 : 0 }, 0,
                     () => verifyCommand(connection, 'D03134', on ? 1 : 0));
             } else if (handle === 'mode') {
-                const mode = typeof value === 'string' && Object.hasOwn(MODES, value.toLowerCase()) ? MODES[value.toLowerCase()] : numeric(value);
-                if (!Object.values(MODES).includes(mode)) throw new Error('Modus muss 0, 1, 17 oder 18 sein (auto/medium/sleep/turbo)');
-                port(connection, 'setPort', 'Control', { D0310C: mode }, 0,
+                const modes = air ? AIR_MODES : MODES;
+                const mode = typeof value === 'string' && Object.hasOwn(modes, value.toLowerCase()) ? modes[value.toLowerCase()] : numeric(value);
+                if (!Object.values(modes).includes(mode)) throw new Error(air
+                    ? 'Philips AC2220/10: Modus muss 0, 1–5, 17, 18 oder 19 sein'
+                    : 'Modus muss 0, 1, 17 oder 18 sein (auto/medium/sleep/turbo)');
+                if (air) airControl(connection, { D0310C: mode });
+                else port(connection, 'setPort', 'Control', { D0310C: mode }, 0,
                     () => verifyCommand(connection, 'D0310C', mode));
             } else if (handle === 'resetFilterClean') port(connection, 'setPort', 'filtWr', { D0520D: 720 }, 1,
                 () => verifyCommand(connection, 'D0520D', 720));
