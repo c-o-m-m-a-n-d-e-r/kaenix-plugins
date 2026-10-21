@@ -434,7 +434,17 @@ Details und Hinweise zu Rückmeldungen: [Mischer-Dokumentation](mischer/README.m
 ### Shelly – Konfiguration
 
 Unterstützt Shelly-Geräte **Gen 1** (REST-API) und **Gen 2 / 3 / 4** (RPC-API mit Digest-Auth SHA-256).  
-Die Gerätegeneraion wird beim ersten Verbindungsaufbau automatisch per `GET /shelly` erkannt.
+Die Gerätegeneration wird beim ersten Verbindungsaufbau automatisch per `GET /shelly` erkannt.
+
+Ab Version **1.0.6** wird eine fehlgeschlagene Erkennung bei aktiviertem
+Status-Intervall automatisch erneut versucht. Bei Intervall 0 startet der nächste
+Eingang einen neuen Versuch. HTTP-Anfragen enden spätestens nach fünf Sekunden;
+abgebrochene Antworten sowie HTTP-/RPC-Fehler werden als Fehler behandelt.
+Wiederholte Eingangstelegramme werden auch bei unverändertem Wert ausgeführt,
+sodass ein Schaltbefehl nach einem Timeout erneut gesendet werden kann.
+Fehlgeschlagene Befehle werden nicht automatisch wiederholt.
+Ein/Aus verwendet den passenden Relay-, Light- oder RGBW-Endpunkt;
+Gen-1-Dimmer SHDM-1/SHDM-2 werden auch bei voreingestelltem Gerätetyp Relay erkannt.
 
 | Parameter | Typ | Default | Beschreibung |
 |-----------|-----|---------|--------------|
