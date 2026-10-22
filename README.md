@@ -312,6 +312,7 @@ module.exports = {
 | **Mischer** | `mischer` | Energie | Regelt ein 3-Wege-Mischventil zyklisch mit gedämpften Stellschritten und Pumpenabschaltung |
 | **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
 | **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
+| **Nuki** | `nuki` | Geräte | Steuert Smart Locks über Bridge, MQTT oder Nuki Web; [Dokumentation](nuki/README.md) |
 | **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
 | **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
