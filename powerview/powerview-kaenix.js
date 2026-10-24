@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.5
+ * @version   1.0.6
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -531,6 +531,42 @@ function dispose(s) {
     clearTimeout(s.motionTimer);
     for (const req of s.requests) req.destroy();
 }
+async function listDevices(values, context) {
+    const pick = (key) =>
+        values[key] != null && String(values[key]).trim() !== ''
+            ? values[key]
+            : context.globalSetting?.(key);
+    const ip = String(pick('ip') ?? '').trim();
+    const portValue = pick('port');
+    const port = portValue == null || portValue === '' ? 80 : Number(portValue);
+    if (!ip || !Number.isInteger(port) || port < 1 || port > 65535)
+        throw new Error('PowerView: Hub-IP und gültigen Port konfigurieren');
+    const s = {
+        cfg: {
+            ip,
+            port,
+            apiVersion: ['1', '2', '3'].includes(String(values.apiVersion))
+                ? String(values.apiVersion)
+                : 'auto',
+        },
+        requests: new Set(),
+    };
+    try {
+        await detect(s);
+        const devices = list(
+            await request(s, 'GET', base(s) + '/shades'),
+            'shadeData',
+            s.version,
+        ).map((device) => {
+            if (!device || !numeric(device.id))
+                throw new Error('Ungültige PowerView-Liste');
+            return { id: String(device.id), name: name(device) };
+        });
+        return { devices };
+    } finally {
+        dispose(s);
+    }
+}
 module.exports = {
     type: 'powerview',
     category: 'Geräte',
@@ -570,9 +606,21 @@ module.exports = {
             placeholder: '80',
         },
     ],
+    globalActions: [
+        { key: 'listDevices', label: 'PowerView-Geräteliste laden' },
+    ],
+    async handleGlobalAction(action, values, context) {
+        if (action !== 'listDevices')
+            throw new Error('Unbekannte Plugin-Aktion');
+        return listDevices(values, context);
+    },
     config: [
         { key: 'deviceName', label: 'Gerätename', type: 'text' },
-        { key: 'deviceId', label: 'Geräte-ID (hat Vorrang)', type: 'text' },
+        {
+            key: 'deviceId',
+            label: 'Geräte-ID (hat Vorrang)',
+            type: 'powerview-device-picker',
+        },
         {
             key: 'apiVersion',
             label: 'PowerView-API',

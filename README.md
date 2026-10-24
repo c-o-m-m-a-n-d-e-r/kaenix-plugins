@@ -317,6 +317,7 @@ module.exports = {
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
 | **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
 | **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
+| **Leica Cine 1** | `leica-cine1` | Geräte | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT und Wake-on-LAN; experimentell, am Gerät ungeprüft; [Dokumentation](leica-cine1/README.md) |
 
 ### BWM – Konfiguration
 
@@ -660,7 +661,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.5**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.6**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -669,6 +670,11 @@ verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speiche
 Ein Gerät wird anhand seiner numerischen ID oder seines eindeutigen Namens
 gewählt, wahlweise in der Node-Konfiguration oder über die Eingänge. Die ID hat
 Vorrang. Szenen funktionieren auch ohne zugeordnetes Gerät.
+
+Ab Version 1.0.6 bietet die Node-Konfiguration eine Geräteliste mit Namen und IDs.
+Die Liste wird vom Hub gelesen und kann aktualisiert werden; die Auswahl übernimmt
+die Geräte-ID. Manuelle IDs bleiben möglich. Unter den Plugin-Einstellungen kann
+die Geräteliste ebenfalls geladen werden. Die Abfrage löst keine Fahrbefehle aus.
 
 | Eingang | Funktion |
 |---|---|
