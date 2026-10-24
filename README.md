@@ -317,6 +317,7 @@ module.exports = {
 | **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
 | **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
 | **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
+| **Lyngdorf MP-60** | `lyngdorf` | Geräte | Hauptzone über TCP: Power, Lautstärke in Prozent, Quellen, RoomPerfect, Voicing und Audiomodus; [Dokumentation](lyngdorf/README.md) |
 | **Leica Cine 1** | `leica-cine1` | Geräte | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT und Wake-on-LAN; experimentell, am Gerät ungeprüft; [Dokumentation](leica-cine1/README.md) |
 
 ### BWM – Konfiguration
