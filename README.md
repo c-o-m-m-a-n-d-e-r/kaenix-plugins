@@ -318,7 +318,34 @@ module.exports = {
 | **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
 | **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
 | **Lyngdorf MP-60** | `lyngdorf` | Geräte | Hauptzone über TCP: Power, Lautstärke in Prozent, Quellen, RoomPerfect, Voicing und Audiomodus; [Dokumentation](lyngdorf/README.md) |
-| **Leica Cine 1** | `leica-cine1` | Geräte | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT und Wake-on-LAN; experimentell, am Gerät ungeprüft; [Dokumentation](leica-cine1/README.md) |
+| **Leica Cine 1** | `leica-cine1` | Geräte | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT; eingebautes Client-Zertifikat, automatische PIN-Übermittlung und gespeicherte Kopplung; [Dokumentation](leica-cine1/README.md) |
+
+### Leica Cine 1 – Einrichtung
+
+Version **1.0.2**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der
+Leica eine PIN anzeigt, diese unter **Kopplungs-PIN** eintragen und den Flow
+speichern/übernehmen. Die PIN wird bei angeforderter Kopplung automatisch
+gesendet; anschließend kann sie entfernt werden. Die Kopplung bleibt gespeichert,
+die automatische Client-ID bleibt bei derselben MAC-Adresse stabil.
+
+Das benötigte öffentliche VIDAA-Client-Zertifikat samt Schlüssel ist mit
+ausdrücklicher Zustimmung eingebaut; Quelle:
+[d3nd3/Hisense-mqtt-keyfiles](https://github.com/d3nd3/Hisense-mqtt-keyfiles).
+Zertifikate, Transport und andere technische Optionen stehen im aktuellen
+Frontend unter **Erweiterte Einstellungen**. Eigene PEM-Werte haben Vorrang.
+Der Betrieb benötigt keinen Zertifikatsdownload.
+
+`power = 1/0` steuert Ein/Aus, `source` wählt eine vom Gerät gelieferte Quellen-ID
+(beim Testgerät `TV`, `HDMI1`, `HDMI2`, `HDMI3`). `selectSource = 1` wählt die
+in der Node konfigurierte HDMI-Quelle. Einschalten benötigt Netzwerk-Standby;
+Ausschalten setzt bestätigten Betrieb und eine aktuelle Geräteantwort voraus.
+Power-Aus wird als Umschaltbefehl nicht automatisch wiederholt.
+
+Am 26.10.2026 am Cine 1 geprüft: Zertifikat/TLS, PIN-Kopplung, Quellenliste,
+Wiederverbindung und Gerätebestätigung eines Befehls für die bereits aktive
+Quelle HDMI2. Ein/Aus aus längerem Standby und ein Wechsel zu einer anderen
+Quelle stehen als Live-Prüfungen noch aus. Die Geräteverbindung läuft im
+Homeserver; der Remote-Gateway benötigt keine Anpassung.
 
 ### BWM – Konfiguration
 
