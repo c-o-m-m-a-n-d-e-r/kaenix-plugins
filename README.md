@@ -662,7 +662,7 @@ Bei Nutzung eines DNS-Namens bleibt die normale Hostnamenprüfung aktiv.
 
 ### PowerView – Hunter Douglas / Luxaflex
 
-`powerview/powerview-kaenix.js`, Version **1.0.6**. Lokale HTTP-Steuerung für
+`powerview/powerview-kaenix.js`, Version **1.0.7**. Lokale HTTP-Steuerung für
 PowerView Gen 1, Gen 2 und Gen 3. Die API wird beim Start erkannt; in der Node kann
 sie auch ausdrücklich ausgewählt werden. Bei Gen 3 die IP des primären Gateways
 verwenden. IP und Port unter **Plugins → PowerView → Einstellungen** speichern
@@ -691,7 +691,7 @@ die Geräteliste ebenfalls geladen werden. Die Abfrage löst keine Fahrbefehle a
 | 13 | Statusintervall in Sekunden: Standard 10, 0 = Polling aus, Minimum 1 |
 
 Die Ausgänge sind in dieser Reihenfolge **Verbindungsstatus**, **Position**,
-**Lamellenwinkel**, **Batterie**, **Batteriewarnung**, **Fährt**. Unveränderte Werte
+**Lamellenwinkel**, **Batterie**, **Batteriewarnung**, **Fährt**, **Signalstärke (dBm)**. Unveränderte Werte
 werden nicht erneut ausgegeben. Polling startet automatisch nach Serverstart;
 gespeicherte Fahrbefehle und Szenen werden dabei nicht wiederholt.
 
@@ -718,6 +718,14 @@ sekundäre Schiene. Für andere kombinierte Positionen eine PowerView-Szene verw
 umgerechnet wird. Gen 3 liefert nur Stufen, ausgegeben als 0/20/50/100 %.
 Die Batteriewarnung folgt der niedrigsten/leeren Batteriestufe, ersatzweise
 ≤20 %. Bei bekannter Netzversorgung werden keine Batterieprozente erfunden.
+
+**Signalstärke:** Ab Version 1.0.7 gibt Ausgang 7 (`signalStrength`) den negativen
+Gen-3-RSSI-Wert in dBm unverändert aus. Je näher an 0, desto stärker das Signal.
+Die Ausgabe erfolgt mit den normalen Statusabfragen; zusätzliche Funkabfragen
+sind nicht erforderlich. Fehlende oder ungültige Werte einschließlich 0 werden
+nicht ausgegeben. Gen 1/2 bleiben an diesem Ausgang unbelegt, da deren
+`signalStrength` eine andere Skala (Prozent) verwendet. Bestehende Ausgänge
+behalten ihre Reihenfolge.
 
 **Fährt:** Die Standard-API liefert nicht überall eine verlässliche Rückmeldung.
 Ohne expliziten Fahrstatus bleibt dieser Ausgang daher unbelegt. Optional kann

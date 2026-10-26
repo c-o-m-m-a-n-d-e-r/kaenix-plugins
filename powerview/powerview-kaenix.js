@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -329,6 +329,14 @@ function report(s, d) {
     const { battery, warning } = parseBattery(s, d);
     if (battery !== undefined) emit(s, 'battery', battery);
     if (warning !== undefined) emit(s, 'batteryWarning', warning);
+    // Gen 3 reports RSSI in dBm; legacy signalStrength uses a percentage scale.
+    if (
+        s.version === 3 &&
+        typeof d.signalStrength === 'number' &&
+        Number.isFinite(d.signalStrength) &&
+        d.signalStrength < 0
+    )
+        emit(s, 'signalStrength', d.signalStrength);
     // Only explicit feedback is a measured motion state. positions.velocity is a
     // configured speed, and motion can be a command: neither proves motor activity.
     const moving = bit(d.isMoving);
@@ -596,6 +604,7 @@ module.exports = {
         { handle: 'battery', label: 'Batterie (0–100 %)' },
         { handle: 'batteryWarning', label: 'Batteriewarnung (0/1)' },
         { handle: 'moving', label: 'Fährt (0/1)' },
+        { handle: 'signalStrength', label: 'Signalstärke (dBm)' },
     ],
     globalSettings: [
         { key: 'ip', label: 'PowerView Hub IP-Adresse', type: 'text' },
