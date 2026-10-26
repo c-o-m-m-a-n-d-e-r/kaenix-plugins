@@ -322,7 +322,7 @@ module.exports = {
 
 ### Leica Cine 1 – Einrichtung
 
-Version **1.0.2**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der
+Version **1.0.3**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der
 Leica eine PIN anzeigt, diese unter **Kopplungs-PIN** eintragen und den Flow
 speichern/übernehmen. Die PIN wird bei angeforderter Kopplung automatisch
 gesendet; anschließend kann sie entfernt werden. Die Kopplung bleibt gespeichert,
@@ -334,6 +334,12 @@ ausdrücklicher Zustimmung eingebaut; Quelle:
 Zertifikate, Transport und andere technische Optionen stehen im aktuellen
 Frontend unter **Erweiterte Einstellungen**. Eigene PEM-Werte haben Vorrang.
 Der Betrieb benötigt keinen Zertifikatsdownload.
+
+Seit 1.0.3 gibt der Ausgang **Beamer eingeschaltet (1/0)** (`isOn`) eine einfache
+binäre Betriebsanzeige aus. **Betriebsstatus gültig (1/0)** (`powerValid`) zeigt,
+ob Gerätedaten vorliegen. Bei Verbindungsproblemen sind beide `0`; das ist keine
+bestätigte Aus-Meldung. Der bestehende Ausgang `power` bleibt kompatibel
+(`1` = Betrieb bestätigt, `null` = unbekannt).
 
 `power = 1/0` steuert Ein/Aus, `source` wählt eine vom Gerät gelieferte Quellen-ID
 (beim Testgerät `TV`, `HDMI1`, `HDMI2`, `HDMI3`). `selectSource = 1` wählt die

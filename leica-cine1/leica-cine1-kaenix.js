@@ -1,6 +1,6 @@
 /**
  * @plugin Leica Cine 1
- * @version 1.0.2
+ * @version 1.0.3
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -132,6 +132,13 @@ function start(id, cfg, context) {
         s.context.emitOutput(handle, value);
     };
     s.status = (message) => s.output("status", message);
+    s.power = (value) => {
+        // The binary display falls back to 0 when state is unknown. Keep validity
+        // separate so network/authentication failures are never confirmed as off.
+        s.output("power", value);
+        s.output("isOn", value === 1 ? 1 : 0);
+        s.output("powerValid", value === null ? 0 : 1);
+    };
     s.fail = (message) => {
         s.output("error", message);
         s.context.warn(message);
@@ -190,7 +197,7 @@ function start(id, cfg, context) {
             if (s.needsPin) return;
             s.stateAt = 0;
             s.connected(false);
-            s.output("power", null);
+            s.power(null);
             s.output("source", null);
             s.fail("Leica: Keine aktuelle Geräterückmeldung");
         }, 45000);
@@ -201,7 +208,7 @@ function start(id, cfg, context) {
         s.connected(true);
         s.stateAt = receivedAt;
         s.lastResponseAt = receivedAt;
-        s.output("power", 1);
+        s.power(1);
         s.output("error", "");
         stale();
         if (
@@ -230,7 +237,7 @@ function start(id, cfg, context) {
         s.observedState = undefined;
         s.stateAt = 0;
         s.connected(false);
-        s.output("power", null);
+        s.power(null);
         s.output("source", null);
         clearInterval(s.poll);
         clearTimeout(s.watchdog);
@@ -322,7 +329,7 @@ function start(id, cfg, context) {
             if (action === "authentication") s.rememberPairing(false);
             s.connected(false);
             s.stateAt = 0;
-            s.output("power", null);
+            s.power(null);
             s.output("source", null);
             s.needsPin = action === "authentication";
             s.authBlocked = true;
@@ -402,7 +409,7 @@ function start(id, cfg, context) {
         }
         if (/^fake_sleep_[01]$/.test(value?.statetype)) {
             s.stateAt = 0;
-            s.output("power", null);
+            s.power(null);
             s.output("source", null);
             return;
         }
@@ -457,7 +464,7 @@ function start(id, cfg, context) {
         s.fail(message);
     });
     s.connected(false);
-    s.output("power", null);
+    s.power(null);
     s.output("source", null);
     return s;
 }
@@ -631,6 +638,8 @@ module.exports = {
     outputs: [
         { handle: "connected", label: "Geräteverbindung (1/0)" },
         { handle: "power", label: "Betrieb (1 = bestätigt, null = unbekannt)" },
+        { handle: "isOn", label: "Beamer eingeschaltet (1/0)" },
+        { handle: "powerValid", label: "Betriebsstatus gültig (1/0)" },
         { handle: "source", label: "Aktive Quellen-ID" },
         { handle: "sources", label: "Verfügbare Quellen" },
         { handle: "status", label: "Status" },
@@ -745,6 +754,8 @@ module.exports = {
                 context.setNodeStatus?.(false);
                 context.emitOutput("connected", 0);
                 context.emitOutput("power", null);
+                context.emitOutput("isOn", 0);
+                context.emitOutput("powerValid", 0);
                 context.emitOutput("source", null);
                 context.emitOutput("error", message);
                 context.warn(message);
