@@ -1,6 +1,6 @@
 /**
  * @plugin Leica Cine 1
- * @version 1.0.3
+ * @version 1.0.4
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -175,6 +175,25 @@ function start(id, cfg, context) {
         s.publish("ui_service", "gettvstate");
         s.publish("ui_service", "sourcelist");
     };
+    s.tryWake = () => {
+        const request = s.wakeRequest;
+        if (
+            !request ||
+            Date.now() - request.at > 15000 ||
+            !s.ready ||
+            !s.online ||
+            s.values.get("power") !== 0 ||
+            Date.now() - s.lastResponseAt > 45000
+        )
+            return false;
+        // KEY_POWER toggles. Send it only for confirmed sleep, once per request.
+        if (!request.sent) {
+            s.publish("remote_service", "sendkey", "KEY_POWER");
+            request.sent = true;
+            s.status("Leica: Aufweckbefehl gesendet; warte auf Gerätestatus");
+        }
+        return true;
+    };
     s.tryPin = () => {
         if (
             !s.online ||
@@ -208,10 +227,18 @@ function start(id, cfg, context) {
         s.connected(true);
         s.stateAt = receivedAt;
         s.lastResponseAt = receivedAt;
-        s.power(1);
+        const sleeping = value.statetype === "fake_sleep_0";
+        s.power(sleeping ? 0 : 1);
+        if (sleeping) {
+            s.output("source", null);
+            s.offPending = false;
+        } else {
+            s.wakeRequest = undefined;
+        }
         s.output("error", "");
         stale();
         if (
+            !sleeping &&
             value.sourceid !== undefined &&
             /^[\w.-]{1,32}$/.test(String(value.sourceid))
         ) {
@@ -227,6 +254,7 @@ function start(id, cfg, context) {
             s.status("Leica: Gerätestatus empfangen");
             s.publish("ui_service", "sourcelist");
         }
+        s.tryWake();
     };
     const disconnected = () => {
         if (!s.active()) return;
@@ -407,12 +435,6 @@ function start(id, cfg, context) {
             }
             return;
         }
-        if (/^fake_sleep_[01]$/.test(value?.statetype)) {
-            s.stateAt = 0;
-            s.power(null);
-            s.output("source", null);
-            return;
-        }
         const running = [
             "sourceswitch",
             "livetv",
@@ -420,6 +442,8 @@ function start(id, cfg, context) {
             "mediadmp",
             "mediadlna",
             "tshift",
+            "fake_sleep_0",
+            "fake_sleep_1",
         ];
         if (!value || !running.includes(value.statetype)) return;
         if (!own && !s.ready && !s.paired) {
@@ -545,10 +569,29 @@ function command(s, inputs, data, handle) {
             throw new Error("Leica: Ein/Aus erwartet 0 oder 1");
         if ([true, 1, "1"].includes(inputs.power)) {
             s.offPending = false;
+            if (
+                s.ready &&
+                s.values.get("power") === 1 &&
+                Date.now() - s.lastResponseAt <= 45000
+            )
+                return;
+            if (!s.wakeRequest || Date.now() - s.wakeRequest.at > 15000) {
+                s.wakeRequest = { at: Date.now(), sent: false };
+            }
+            if (s.tryWake()) return;
             wake(s);
+            s.request();
             return;
         }
+        s.wakeRequest = undefined;
+        s.stopWake?.();
         if (s.offPending) return;
+        if (
+            s.ready &&
+            s.values.get("power") === 0 &&
+            Date.now() - s.lastResponseAt <= 45000
+        )
+            return;
         // KEY_POWER is a toggle. Never send it blind or repeat it after a timeout.
         if (!s.ready || !s.stateAt || Date.now() - s.lastResponseAt > 45000) {
             throw new Error(
@@ -637,7 +680,10 @@ module.exports = {
     ],
     outputs: [
         { handle: "connected", label: "Geräteverbindung (1/0)" },
-        { handle: "power", label: "Betrieb (1 = bestätigt, null = unbekannt)" },
+        {
+            handle: "power",
+            label: "Betrieb (1 = ein, 0 = Standby, null = unbekannt)",
+        },
         { handle: "isOn", label: "Beamer eingeschaltet (1/0)" },
         { handle: "powerValid", label: "Betriebsstatus gültig (1/0)" },
         { handle: "source", label: "Aktive Quellen-ID" },

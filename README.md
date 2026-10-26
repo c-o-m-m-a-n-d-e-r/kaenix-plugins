@@ -322,7 +322,7 @@ module.exports = {
 
 ### Leica Cine 1 – Einrichtung
 
-Version **1.0.3**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der
+Version **1.0.4**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der
 Leica eine PIN anzeigt, diese unter **Kopplungs-PIN** eintragen und den Flow
 speichern/übernehmen. Die PIN wird bei angeforderter Kopplung automatisch
 gesendet; anschließend kann sie entfernt werden. Die Kopplung bleibt gespeichert,
@@ -339,7 +339,7 @@ Seit 1.0.3 gibt der Ausgang **Beamer eingeschaltet (1/0)** (`isOn`) eine einfach
 binäre Betriebsanzeige aus. **Betriebsstatus gültig (1/0)** (`powerValid`) zeigt,
 ob Gerätedaten vorliegen. Bei Verbindungsproblemen sind beide `0`; das ist keine
 bestätigte Aus-Meldung. Der bestehende Ausgang `power` bleibt kompatibel
-(`1` = Betrieb bestätigt, `null` = unbekannt).
+(`1` = Betrieb, `0` = Standby bestätigt, `null` = unbekannt).
 
 `power = 1/0` steuert Ein/Aus, `source` wählt eine vom Gerät gelieferte Quellen-ID
 (beim Testgerät `TV`, `HDMI1`, `HDMI2`, `HDMI3`). `selectSource = 1` wählt die
@@ -349,8 +349,14 @@ Power-Aus wird als Umschaltbefehl nicht automatisch wiederholt.
 
 Am 26.10.2026 am Cine 1 geprüft: Zertifikat/TLS, PIN-Kopplung, Quellenliste,
 Wiederverbindung und Gerätebestätigung eines Befehls für die bereits aktive
-Quelle HDMI2. Ein/Aus aus längerem Standby und ein Wechsel zu einer anderen
-Quelle stehen als Live-Prüfungen noch aus. Die Geräteverbindung läuft im
+Quelle HDMI2. In 1.0.4 zusätzlich am Gerät geprüft: Aufwecken aus dem per MQTT
+gemeldeten Standby (`fake_sleep_0`) per Power-Befehl und anschließende
+Betriebsmeldung. Ein pingbarer Projektor kann ausgeschaltet sein; das Plugin
+unterscheidet jetzt Netzwerkverbindung und Betriebszustand. Für diesen
+Standby wird kein Wake-on-LAN benötigt. Ein-Telegramme bei bestätigtem Betrieb
+und Aus-Telegramme bei bestätigtem Standby senden keinen Umschaltbefehl.
+Tiefschlaf-Wake-on-LAN bei nicht erreichbarem Gerät und Wechsel zu einem anderen
+Eingang sind noch offen. Die Geräteverbindung läuft im
 Homeserver; der Remote-Gateway benötigt keine Anpassung.
 
 ### BWM – Konfiguration
