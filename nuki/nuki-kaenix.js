@@ -1,6 +1,6 @@
 /**
  * @plugin Nuki
- * @version 1.0.4
+ * @version 1.0.6
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  */
@@ -9,6 +9,7 @@ const http = require('http');
 const https = require('https');
 const path = require('path');
 const { createHash } = require('crypto');
+const bridgeQueues = new Map();
 const callbackListeners = new Map();
 const callbackSessions = new Map();
 const states = new Map();
@@ -193,6 +194,7 @@ function close(id) {
     const s = states.get(id);
     if (!s) return;
     states.delete(id);
+    cancelBridgeRequests(s);
     releaseCallback(s);
     clearInterval(s.poll);
     clearTimeout(s.commandTimer);
@@ -209,8 +211,74 @@ function later(s, fn, ms) {
     s.timers.add(timer);
 }
 
+function bridgeKey(cfg) {
+    return JSON.stringify([cfg.host.toLowerCase(), cfg.port]);
+}
+function cancelBridgeRequests(owner) {
+    for (const queue of bridgeQueues.values()) {
+        const cancelled = queue.pending.filter((job) => job.owner === owner);
+        queue.pending = queue.pending.filter((job) => job.owner !== owner);
+        for (const job of cancelled)
+            job.reject(
+                new Error(
+                    'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                ),
+            );
+    }
+}
+function drainBridge(key, queue) {
+    if (queue.running) return;
+    const job = queue.pending.shift();
+    if (!job) {
+        bridgeQueues.delete(key);
+        return;
+    }
+    queue.running = true;
+    // The HTTP operation owns cancellation of an already sent request. A disposed
+    // node removes its queued jobs and destroys its own in-flight transport.
+    const active = job.owner.active?.() ?? job.owner.members?.size > 0;
+    const operation = active
+        ? requestHttp(job.owner, job.endpoint, job.options)
+        : Promise.reject(
+              new Error(
+                  'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+              ),
+          );
+    const complete = (settle, value) => {
+        queue.running = false;
+        drainBridge(key, queue);
+        settle(value);
+    };
+    operation.then(
+        (value) => complete(job.resolve, value),
+        (error) => complete(job.reject, error),
+    );
+}
+function request(s, endpoint, options = {}) {
+    if (s.cfg.mode !== 'bridge') return requestHttp(s, endpoint, options);
+    const key = bridgeKey(s.cfg);
+    let queue = bridgeQueues.get(key);
+    if (
+        options.action !== undefined &&
+        queue &&
+        (queue.running || queue.pending.length)
+    ) {
+        return Promise.reject(
+            new Error('Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet'),
+        );
+    }
+    if (!queue) {
+        queue = { running: false, pending: [] };
+        bridgeQueues.set(key, queue);
+    }
+    return new Promise((resolve, reject) => {
+        queue.pending.push({ owner: s, endpoint, options, resolve, reject });
+        drainBridge(key, queue);
+    });
+}
+
 // Never expose raw provider errors, response bodies or URLs containing credentials.
-function request(s, endpoint, { action, simple, query } = {}) {
+function requestHttp(s, endpoint, { action, simple, query } = {}) {
     const cfg = s.cfg;
     const url =
         cfg.mode === 'web'
@@ -259,8 +327,13 @@ function request(s, endpoint, { action, simple, query } = {}) {
                         Math.min(3600, Math.max(60, seconds || 60)) * 1000;
                 }
                 if (code < 200 || code >= 300) {
+                    res.on('error', () =>
+                        fail(
+                            'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                        ),
+                    );
+                    res.on('end', () => fail(`Nuki: HTTP ${code}`));
                     res.resume();
-                    fail(`Nuki: HTTP ${code}`);
                     return;
                 }
                 const chunks = [];
@@ -419,6 +492,7 @@ function releaseCallback(s) {
     if (!session) return;
     session.members.delete(s);
     if (session.members.size) return;
+    cancelBridgeRequests(session);
     callbackSessions.delete(session.url);
     for (const req of session.requests) req.destroy();
     const listener = session.listener;
@@ -618,6 +692,10 @@ async function command(s, action) {
     }
     if (!s.ready || Date.now() < s.retryAt) {
         s.fail('Nuki: nicht bereit; Befehl wurde nicht gesendet');
+        return;
+    }
+    if (s.cfg.mode === 'bridge' && bridgeQueues.has(bridgeKey(s.cfg))) {
+        s.fail('Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet');
         return;
     }
     s.busy = true;
@@ -894,6 +972,7 @@ module.exports = {
         { handle: 'lock', label: 'Abschließen' },
         { handle: 'unlatch', label: 'Falle zurückziehen' },
         { handle: 'deviceUnlock', label: 'Öffnen gemäß Nuki-Konfiguration' },
+        { handle: 'trigger', label: 'Trigger (0 = auf, 1 = zu)' },
         { handle: 'locked', label: 'Sollzustand (1 = abgeschlossen)' },
         { handle: 'refresh', label: 'Status abfragen' },
         { handle: 'reconnect', label: 'Neu verbinden' },
@@ -1033,8 +1112,8 @@ module.exports = {
             const handle = context.triggerHandle;
             // Only the actual telegram may act; ignore all cached input values at startup/reconnect.
             let action;
-            if (handle === 'locked') {
-                const value = boolean(inputs.locked);
+            if (handle === 'locked' || handle === 'trigger') {
+                const value = boolean(inputs[handle]);
                 if (value === undefined) {
                     s.fail('Nuki: Sollzustand muss 0 oder 1 sein');
                     return {};
