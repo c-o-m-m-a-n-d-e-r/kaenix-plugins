@@ -1,6 +1,6 @@
 /**
  * @plugin Nuki
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  */
@@ -893,22 +893,26 @@ module.exports = {
         },
         {
             key: 'host',
+            visibleWhen: { mode: ['bridge', 'mqtt'] },
             label: 'Bridge / MQTT-Broker (Hostname oder IP)',
             type: 'text',
         },
         {
             key: 'port',
+            visibleWhen: { mode: ['bridge', 'mqtt'] },
             label: 'Port (0 = Standard der Verbindungsart)',
             type: 'number',
             default: 0,
         },
         {
             key: 'token',
+            visibleWhen: { mode: ['bridge', 'web'] },
             label: 'Bridge- oder Nuki-Web-API-Token',
             type: 'password',
         },
         {
             key: 'deviceType',
+            visibleWhen: { mode: ['bridge'] },
             label: 'Bridge-Gerätetyp',
             type: 'select',
             default: 'auto',
@@ -922,31 +926,46 @@ module.exports = {
         },
         {
             key: 'callback',
+            visibleWhen: { mode: ['bridge'] },
             label: 'Bridge-Callback automatisch einrichten',
             type: 'checkbox',
             default: false,
         },
         {
             key: 'callbackHost',
+            visibleWhen: { mode: ['bridge'], callback: [true, 1, '1', 'true'] },
             label: 'Callback: lokale HomeServer-IP oder Hostname',
             type: 'text',
         },
         {
             key: 'callbackPort',
+            visibleWhen: { mode: ['bridge'], callback: [true, 1, '1', 'true'] },
             label: 'Callback: lokaler Empfangsport',
             type: 'number',
             default: 8099,
         },
-        { key: 'username', label: 'MQTT-Benutzername', type: 'text' },
-        { key: 'password', label: 'MQTT-Passwort', type: 'password' },
+        {
+            key: 'username',
+            visibleWhen: { mode: ['mqtt'] },
+            label: 'MQTT-Benutzername',
+            type: 'text',
+        },
+        {
+            key: 'password',
+            visibleWhen: { mode: ['mqtt'] },
+            label: 'MQTT-Passwort',
+            type: 'password',
+        },
         {
             key: 'mqttTLS',
+            visibleWhen: { mode: ['mqtt'] },
             label: 'MQTT mit TLS (Broker-Zertifikat prüfen)',
             type: 'checkbox',
             default: false,
         },
         {
             key: 'interval',
+            visibleWhen: { mode: ['bridge', 'web'] },
             label: 'HTTP-Statusintervall (s, 0 = manuell)',
             type: 'number',
             default: 60,
