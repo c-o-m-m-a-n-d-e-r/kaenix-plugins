@@ -174,6 +174,12 @@ const token = context.globalSetting('apiToken');
 context.setGlobalSetting('letzterWert', 42);
 ```
 
+### HomeServer-Adresse
+
+`context.getServerIp()` liest die aktuelle HomeServer-IP aus den allgemeinen
+Einstellungen (`server_ip`). Ohne konfigurierten Wert liefert der Helper `''`.
+Der Zugriff ist lesend und stellt keine anderen Systemeinstellungen bereit.
+
 ### Node-ID
 
 ```js

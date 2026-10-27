@@ -1,6 +1,6 @@
 /**
  * @plugin Nuki
- * @version 1.0.2
+ * @version 1.0.4
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  */
@@ -52,7 +52,35 @@ function boolean(value) {
     if ([false, 0, '0', 'false'].includes(value)) return false;
     return undefined;
 }
-function options(data) {
+function callbackAddress(context) {
+    const value = String(context.getServerIp?.() || '').trim();
+    if (!value) {
+        throw new Error(
+            'Nuki: HomeServer-IP fehlt; in den Einstellungen eintragen',
+        );
+    }
+    try {
+        const url = new URL(
+            /^https?:\/\//iu.test(value) ? value : `http://${value}`,
+        );
+        if (
+            !url.hostname ||
+            url.username ||
+            url.password ||
+            url.search ||
+            url.hash ||
+            (!/^https?:\/\//iu.test(value) &&
+                (url.pathname !== '/' || url.hostname !== value.toLowerCase()))
+        )
+            throw new Error();
+        return url.hostname;
+    } catch {
+        throw new Error(
+            'Nuki: HomeServer-IP in den Einstellungen ist ungültig',
+        );
+    }
+}
+function options(data, context) {
     const mode = data.mode || 'bridge';
     if (!['bridge', 'mqtt', 'web'].includes(mode))
         throw new Error('Nuki: ungültige Verbindungsart');
@@ -105,13 +133,20 @@ function options(data) {
             );
             cfg.callback = on(data.callback);
             if (cfg.callback) {
-                cfg.callbackHost = String(data.callbackHost || '').trim();
-                cfg.callbackPort = number(data.callbackPort ?? 8099, 1, 65535);
-                if (
-                    !cfg.callbackHost ||
-                    /[\s/\\?#@\u0000-\u001f]/u.test(cfg.callbackHost) ||
-                    !cfg.callbackPort
-                ) {
+                cfg.callbackHost = callbackAddress(context);
+                cfg.callbackPort = number(
+                    data.callbackPort == null || data.callbackPort === ''
+                        ? 8099
+                        : data.callbackPort,
+                    1,
+                    65535,
+                );
+                if (!cfg.callbackPort) {
+                    throw new Error(
+                        'Nuki: Callback-Port muss zwischen 1 und 65535 liegen',
+                    );
+                }
+                if (/[\s/\\?#@\u0000-\u001f]/u.test(cfg.callbackHost)) {
                     throw new Error(
                         'Nuki: Callback-Adresse oder Port ist ungültig',
                     );
@@ -380,6 +415,7 @@ function attachCallback(s) {
 }
 function releaseCallback(s) {
     const session = s.callbackSession;
+    s.callbackSession = null;
     if (!session) return;
     session.members.delete(s);
     if (session.members.size) return;
@@ -498,6 +534,19 @@ async function read(s, direct = false) {
     s.reading = true;
     const epoch = s.epoch;
     try {
+        if (s.cfg.mode === 'bridge' && s.cfg.callback) {
+            let host;
+            try {
+                host = callbackAddress(s.context);
+            } catch (error) {
+                releaseCallback(s);
+                throw error;
+            }
+            if (host !== s.cfg.callbackHost) {
+                releaseCallback(s);
+                s.cfg = { ...s.cfg, callbackHost: host };
+            }
+        }
         let p,
             available = true;
         if (s.cfg.mode === 'web') {
@@ -932,12 +981,6 @@ module.exports = {
             default: false,
         },
         {
-            key: 'callbackHost',
-            visibleWhen: { mode: ['bridge'], callback: [true, 1, '1', 'true'] },
-            label: 'Callback: lokale HomeServer-IP oder Hostname',
-            type: 'text',
-        },
-        {
             key: 'callbackPort',
             visibleWhen: { mode: ['bridge'], callback: [true, 1, '1', 'true'] },
             label: 'Callback: lokaler Empfangsport',
@@ -975,7 +1018,7 @@ module.exports = {
         const id = context.nodeId;
         let s = states.get(id);
         try {
-            const cfg = options(data);
+            const cfg = options(data, context);
             const restart =
                 context.triggerHandle === 'reconnect' && on(inputs.reconnect);
             if (
