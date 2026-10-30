@@ -369,7 +369,6 @@ Homeserver; der Remote-Gateway benötigt keine Anpassung.
 
 | Parameter | Typ | Default | Beschreibung |
 |-----------|-----|---------|--------------|
-| `schwelleDefault` | number | 100 | Helligkeitsschwelle – nur unter diesem Wert wird eingeschaltet |
 | `nachlaufzeitDefault` | number | 1 | Nachlaufzeit in Minuten |
 | `freigabeDefault` | number | 1 | Freigabe beim Start (1 = aktiv, 0 = gesperrt) |
 | `grundDefault` | number | 0 | Grundbeleuchtung nach Ablauf (1 = ja, 0 = nein) |
@@ -380,7 +379,7 @@ Homeserver; der Remote-Gateway benötigt keine Anpassung.
 |--------|--------------|
 | `trigger` | Bewegungsmelder-Impuls (1 = Bewegung erkannt) |
 | `helligkeit` | Aktueller Helligkeitswert |
-| `schwelle` | Helligkeitsschwelle (überschreibt Konfiguration) |
+| `schwelle` | Optionale Helligkeitsschwelle; Prüfung erst nach dem ersten gültigen Telegramm (auch 0) |
 | `nachlaufzeit` | Nachlaufzeit in Minuten (überschreibt Konfiguration) |
 | `freigabe` | Freigabe (1 = aktiv, 0 = gesperrt) |
 | `grundbeleuchtung` | Grundbeleuchtung nach Ablauf aktivieren (1 = ja) |
@@ -396,9 +395,15 @@ Homeserver; der Remote-Gateway benötigt keine Anpassung.
 | `aktiv` | Nachlauf läuft gerade (1 / 0) |
 | `restzeit` | Verbleibende Nachlaufzeit in Sekunden |
 
-**Verhalten:** Trigger + Freigabe aktiv + Helligkeit ≤ Schwelle → Licht ein, Nachlauftimer startet.  
-Kommt während des Nachlaufs ein erneuter Trigger, wird der Timer zurückgesetzt (verlängert).  
-Nach Ablauf: wenn Grundbeleuchtung aktiv und Helligkeit < Schwelle → `grund`-Ausgang, sonst `aus`.
+**Verhalten:** Trigger `1` + Freigabe aktiv → Licht ein, Nachlauftimer startet.
+Erst nach einem gültigen Telegramm am Eingang `schwelle` wird zusätzlich
+Helligkeit ≤ Schwelle geprüft. Ohne Schwellenwert bleibt die Helligkeit unberücksichtigt;
+eine alte Konfiguration `schwelleDefault` aktiviert die Prüfung nicht.
+Kommt während des Nachlaufs ein erneuter zulässiger Trigger `1`, startet der
+Ausschalt-Timer ab diesem Zeitpunkt mit der aktuellen Nachlaufzeit in Minuten neu.
+Andere Eingangstelegramme aktualisieren nur die Werte und starten keinen Timer.
+Nach Ablauf: wenn Grundbeleuchtung aktiv und keine Schwelle gesetzt oder
+Helligkeit < Schwelle → `grund`-Ausgang, sonst `aus`.
 
 ---
 
