@@ -1,46 +1,46 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.11
+ * @version   1.0.12
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
 
-'use strict';
+"use strict";
 
-const http = require('http');
+const http = require("http");
 
 // ── Modulweiter Zustand pro Node-Instanz ──────────────────────────────────────
 
 const _states = new Map();
 
 function getState(nodeId) {
-  if (!_states.has(nodeId)) {
-    _states.set(nodeId, {
-      emit:        null,
-      warn:        null,
-      log:         null,
-      nodeLog:     null,
-      setStatus:   null,   // context.setNodeStatus-Referenz
-      prevInputs:  {},
-      prevEmitted: {},     // last emitted values for send-by-change
-      timer:       null,
-      ip:          null,
-      port:        null,
-      apiKey:      null,
-      lightId:     null,
-      groupId:     null,
-      onoff:       false,
-      bri:         254,
-      gamutType:   null,  // wird aus capabilities der Bridge gelesen
-      statusBusy: false,
-      failures: 0,
-      retryAt: 0,
-      generation: 0,
-      disposed: false,
-      request: null,
-    });
-  }
-  return _states.get(nodeId);
+    if (!_states.has(nodeId)) {
+        _states.set(nodeId, {
+            emit: null,
+            warn: null,
+            log: null,
+            nodeLog: null,
+            setStatus: null, // context.setNodeStatus-Referenz
+            prevInputs: {},
+            prevEmitted: {}, // last emitted values for send-by-change
+            timer: null,
+            ip: null,
+            port: null,
+            apiKey: null,
+            lightId: null,
+            groupId: null,
+            onoff: false,
+            bri: 254,
+            gamutType: null, // wird aus capabilities der Bridge gelesen
+            statusBusy: false,
+            failures: 0,
+            retryAt: 0,
+            generation: 0,
+            disposed: false,
+            request: null,
+        });
+    }
+    return _states.get(nodeId);
 }
 
 // ── Farbgamut-Definitionen ─────────────────────────────────────────────────────
@@ -48,577 +48,777 @@ function getState(nodeId) {
 // Quelle: Philips Hue Developer Documentation
 
 const GAMUTS = {
-  A: { r: [0.704, 0.296],   g: [0.2151, 0.7106], b: [0.138,  0.08]   }, // LivingColors, Bloom, Aura
-  B: { r: [0.675, 0.322],   g: [0.4091, 0.518],  b: [0.167,  0.04]   }, // Hue A19 (Gen 1/2)
-  C: { r: [0.6915, 0.3083], g: [0.1700, 0.7000], b: [0.1532, 0.0475] }, // Hue Go, BR30, LightStrips+
+    A: { r: [0.704, 0.296], g: [0.2151, 0.7106], b: [0.138, 0.08] }, // LivingColors, Bloom, Aura
+    B: { r: [0.675, 0.322], g: [0.4091, 0.518], b: [0.167, 0.04] }, // Hue A19 (Gen 1/2)
+    C: { r: [0.6915, 0.3083], g: [0.17, 0.7], b: [0.1532, 0.0475] }, // Hue Go, BR30, LightStrips+
 };
 
 function crossProduct(p1, p2) {
-  return p1[0] * p2[1] - p1[1] * p2[0];
+    return p1[0] * p2[1] - p1[1] * p2[0];
 }
 
 function checkInGamut(gamut, p) {
-  const { r, g, b } = gamut;
-  const v1 = [g[0] - r[0], g[1] - r[1]];
-  const v2 = [b[0] - r[0], b[1] - r[1]];
-  const q  = [p[0] - r[0], p[1] - r[1]];
-  const s  = crossProduct(q, v2) / crossProduct(v1, v2);
-  const t  = crossProduct(v1, q) / crossProduct(v1, v2);
-  return s >= 0 && t >= 0 && s + t <= 1;
+    const { r, g, b } = gamut;
+    const v1 = [g[0] - r[0], g[1] - r[1]];
+    const v2 = [b[0] - r[0], b[1] - r[1]];
+    const q = [p[0] - r[0], p[1] - r[1]];
+    const s = crossProduct(q, v2) / crossProduct(v1, v2);
+    const t = crossProduct(v1, q) / crossProduct(v1, v2);
+    return s >= 0 && t >= 0 && s + t <= 1;
 }
 
 function closestOnLine(A, B, P) {
-  const AP = [P[0] - A[0], P[1] - A[1]];
-  const AB = [B[0] - A[0], B[1] - A[1]];
-  const ab2 = AB[0] ** 2 + AB[1] ** 2;
-  const t   = Math.max(0, Math.min(1, (AP[0] * AB[0] + AP[1] * AB[1]) / ab2));
-  return [A[0] + AB[0] * t, A[1] + AB[1] * t];
+    const AP = [P[0] - A[0], P[1] - A[1]];
+    const AB = [B[0] - A[0], B[1] - A[1]];
+    const ab2 = AB[0] ** 2 + AB[1] ** 2;
+    const t = Math.max(0, Math.min(1, (AP[0] * AB[0] + AP[1] * AB[1]) / ab2));
+    return [A[0] + AB[0] * t, A[1] + AB[1] * t];
 }
 
 function dist2D(a, b) {
-  return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+    return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 }
 
 function clampToGamut(gamut, p) {
-  const { r, g, b } = gamut;
-  const candidates = [
-    closestOnLine(r, g, p),
-    closestOnLine(b, r, p),
-    closestOnLine(g, b, p),
-  ];
-  return candidates.reduce((best, c) => dist2D(p, c) < dist2D(p, best) ? c : best);
+    const { r, g, b } = gamut;
+    const candidates = [
+        closestOnLine(r, g, p),
+        closestOnLine(b, r, p),
+        closestOnLine(g, b, p),
+    ];
+    return candidates.reduce((best, c) =>
+        dist2D(p, c) < dist2D(p, best) ? c : best,
+    );
 }
 
 // RGB (0–255) → CIE 1931 xy mit Gamut-Korrektur
-function rgbToXY(r, g, b, gamutKey = 'B') {
-  r /= 255; g /= 255; b /= 255;
+function rgbToXY(r, g, b, gamutKey = "B") {
+    r /= 255;
+    g /= 255;
+    b /= 255;
 
-  // Inverse sRGB Gamma-Korrektur
-  const toLinear = (v) => v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92;
-  r = toLinear(r); g = toLinear(g); b = toLinear(b);
+    // Inverse sRGB Gamma-Korrektur
+    const toLinear = (v) =>
+        v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92;
+    r = toLinear(r);
+    g = toLinear(g);
+    b = toLinear(b);
 
-  // Wide RGB D65 → XYZ
-  const X = r * 0.664511 + g * 0.154324 + b * 0.162028;
-  const Y = r * 0.283881 + g * 0.668433 + b * 0.047685;
-  const Z = r * 0.000088 + g * 0.072310 + b * 0.986039;
+    // Wide RGB D65 → XYZ
+    const X = r * 0.664511 + g * 0.154324 + b * 0.162028;
+    const Y = r * 0.283881 + g * 0.668433 + b * 0.047685;
+    const Z = r * 0.000088 + g * 0.07231 + b * 0.986039;
 
-  const sum = X + Y + Z;
-  let xy = sum === 0 ? [0.3127, 0.3290] : [X / sum, Y / sum]; // Weißpunkt als Fallback
+    const sum = X + Y + Z;
+    let xy = sum === 0 ? [0.3127, 0.329] : [X / sum, Y / sum]; // Weißpunkt als Fallback
 
-  const gamut = GAMUTS[gamutKey] || GAMUTS.B;
-  if (!checkInGamut(gamut, xy)) {
-    xy = clampToGamut(gamut, xy);
-  }
-  return xy;
+    const gamut = GAMUTS[gamutKey] || GAMUTS.B;
+    if (!checkInGamut(gamut, xy)) {
+        xy = clampToGamut(gamut, xy);
+    }
+    return xy;
 }
 
 // CIE 1931 xy + Helligkeit → RGB (0–255)
 function xyToRGB(x, y, bri = 1) {
-  const Y = bri;
-  const X = (Y / y) * x;
-  const Z = (Y / y) * (1 - x - y);
+    const Y = bri;
+    const X = (Y / y) * x;
+    const Z = (Y / y) * (1 - x - y);
 
-  let r =  X *  3.2406 - Y * 1.5372 - Z * 0.4986;
-  let g = -X *  0.9689 + Y * 1.8758 + Z * 0.0415;
-  let b =  X *  0.0557 - Y * 0.2040 + Z * 1.0570;
+    let r = X * 3.2406 - Y * 1.5372 - Z * 0.4986;
+    let g = -X * 0.9689 + Y * 1.8758 + Z * 0.0415;
+    let b = X * 0.0557 - Y * 0.204 + Z * 1.057;
 
-  // sRGB Gamma-Korrektur
-  const toSRGB = (v) => Math.max(0, v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
-  [r, g, b] = [r, g, b].map(toSRGB);
+    // sRGB Gamma-Korrektur
+    const toSRGB = (v) =>
+        Math.max(
+            0,
+            v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055,
+        );
+    [r, g, b] = [r, g, b].map(toSRGB);
 
-  const mx = Math.max(r, g, b);
-  if (mx > 1) [r, g, b] = [r / mx, g / mx, b / mx];
+    const mx = Math.max(r, g, b);
+    if (mx > 1) [r, g, b] = [r / mx, g / mx, b / mx];
 
-  return [r, g, b].map(v => Math.round(v * 255));
+    return [r, g, b].map((v) => Math.round(v * 255));
 }
 
 function rgb2hsv(r, g, b) {
-  r /= 255; g /= 255; b /= 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), df = mx - mn;
-  let h = 0;
-  if (mx !== mn) {
-    if      (mx === r) h = ((g - b) / df + 6) % 6 * 60;
-    else if (mx === g) h = ((b - r) / df + 2) * 60;
-    else               h = ((r - g) / df + 4) * 60;
-  }
-  return [Math.round(h), mx === 0 ? 0 : Math.round(df / mx * 100), Math.round(mx * 100)];
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const mx = Math.max(r, g, b),
+        mn = Math.min(r, g, b),
+        df = mx - mn;
+    let h = 0;
+    if (mx !== mn) {
+        if (mx === r) h = (((g - b) / df + 6) % 6) * 60;
+        else if (mx === g) h = ((b - r) / df + 2) * 60;
+        else h = ((r - g) / df + 4) * 60;
+    }
+    return [
+        Math.round(h),
+        mx === 0 ? 0 : Math.round((df / mx) * 100),
+        Math.round(mx * 100),
+    ];
 }
 
 // Hilfsfunktionen für Wertkonvertierungen
-const pctToBri  = (pct) => Math.max(1, Math.min(254, Math.round(254 * pct / 100)));
-const briToPct  = (bri) => Math.round(bri * 100 / 254);
-const pctToCT   = (pct) => Math.max(153, Math.min(500, Math.round(153 + pct * (500 - 153) / 100)));
-const ctToPct   = (ct)  => Math.round((ct - 153) * 100 / (500 - 153));
+const pctToBri = (pct) =>
+    Math.max(1, Math.min(254, Math.round((254 * pct) / 100)));
+const briToPct = (bri) => Math.round((bri * 100) / 254);
+const pctToCT = (pct) =>
+    Math.max(153, Math.min(500, Math.round(153 + (pct * (500 - 153)) / 100)));
+const ctToPct = (ct) => Math.round(((ct - 153) * 100) / (500 - 153));
 
 // ── HTTP-Helfer ────────────────────────────────────────────────────────────────
 
-function httpRequest(ip, port, method, path, body, extraHeaders = {}, timeoutMs = 8000, state = null) {
-  return new Promise((resolve, reject) => {
-    const bodyStr = body != null ? JSON.stringify(body) : '';
-    const headers = { 'Content-Type': 'application/json', 'Connection': 'close', ...extraHeaders };
-    if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr);
+function httpRequest(
+    ip,
+    port,
+    method,
+    path,
+    body,
+    extraHeaders = {},
+    timeoutMs = 8000,
+    state = null,
+) {
+    return new Promise((resolve, reject) => {
+        const bodyStr = body != null ? JSON.stringify(body) : "";
+        const headers = {
+            "Content-Type": "application/json",
+            Connection: "close",
+            ...extraHeaders,
+        };
+        if (bodyStr) headers["Content-Length"] = Buffer.byteLength(bodyStr);
 
-    const req = http.request(
-      { hostname: ip, port, path, method, headers, timeout: timeoutMs },
-      (res) => {
-        let raw = '';
-        res.on('error', reject);
-        res.on('aborted', () => reject(new Error('HTTP Antwort abgebrochen')));
-        res.on('data', (c) => (raw += c));
-        res.on('end',  () => resolve({ status: res.statusCode, body: raw, headers: res.headers }));
-      }
-    );
-    if (state) state.request = req;
-    req.on('error',   reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('HTTP Timeout')); });
-    if (bodyStr) req.write(bodyStr);
-    req.end();
-  });
+        const req = http.request(
+            { hostname: ip, port, path, method, headers, timeout: timeoutMs },
+            (res) => {
+                let raw = "";
+                res.on("error", reject);
+                res.on("aborted", () =>
+                    reject(new Error("HTTP Antwort abgebrochen")),
+                );
+                res.on("data", (c) => (raw += c));
+                res.on("end", () =>
+                    resolve({
+                        status: res.statusCode,
+                        body: raw,
+                        headers: res.headers,
+                    }),
+                );
+            },
+        );
+        if (state) state.request = req;
+        req.on("error", reject);
+        req.on("timeout", () => {
+            req.destroy();
+            reject(new Error("HTTP Timeout"));
+        });
+        if (bodyStr) req.write(bodyStr);
+        req.end();
+    });
 }
 
 // Liefert Basispfad und Modus ('state' | 'action') abhängig von Lampen- oder Gruppen-ID
 function buildEndpoint(apiKey, lightId, groupId) {
-  if (lightId > 0) return { base: `/api/${apiKey}/lights/${lightId}`, mode: 'state'  };
-  if (groupId > 0) return { base: `/api/${apiKey}/groups/${groupId}`, mode: 'action' };
-  return null;
+    if (lightId > 0)
+        return { base: `/api/${apiKey}/lights/${lightId}`, mode: "state" };
+    if (groupId > 0)
+        return { base: `/api/${apiKey}/groups/${groupId}`, mode: "action" };
+    return null;
 }
 
 // ── Status abrufen & parsen ────────────────────────────────────────────────────
 
 function pollDelay(cfg) {
-  // Historisches „Long-Polling“ ist normales Polling, kein Push-Kanal.
-  return cfg.longPoll ? Math.max(5, cfg.interval || 0) : Math.max(0, cfg.interval);
+    // Historisches „Long-Polling“ ist normales Polling, kein Push-Kanal.
+    return cfg.longPoll
+        ? Math.max(5, cfg.interval || 0)
+        : Math.max(0, cfg.interval);
 }
 
 function scheduleStatus(state) {
-  clearTimeout(state.timer);
-  state.timer = null;
-  const seconds = pollDelay(state.cfg);
-  if (state.disposed || !seconds) return;
-  const delay = Math.max(seconds * 1000, state.retryAt - Date.now());
-  state.timer = setTimeout(() => {
+    clearTimeout(state.timer);
     state.timer = null;
-    void fetchStatus(state.cfg, state);
-  }, delay);
-  state.timer.unref?.();
+    const seconds = pollDelay(state.cfg);
+    if (state.disposed || !seconds) return;
+    const delay = Math.max(seconds * 1000, state.retryAt - Date.now());
+    state.timer = setTimeout(() => {
+        state.timer = null;
+        void fetchStatus(state.cfg, state);
+    }, delay);
+    state.timer.unref?.();
 }
 
 function stopStatus(state) {
-  state.generation++;
-  clearTimeout(state.timer);
-  state.timer = null;
-  state.request?.destroy(new Error('Statusabfrage beendet'));
-  state.request = null;
-  state.statusBusy = false;
+    state.generation++;
+    clearTimeout(state.timer);
+    state.timer = null;
+    state.request?.destroy(new Error("Statusabfrage beendet"));
+    state.request = null;
+    state.statusBusy = false;
 }
 
 async function fetchStatus(cfg, state) {
-  if (state.disposed || state.statusBusy || Date.now() < state.retryAt) return;
-  // Nachlaufende Befehle dürfen keine alte Bridge mehr abfragen.
-  if (cfg.ip !== state.cfg.ip || cfg.port !== state.cfg.port || cfg.apiKey !== state.cfg.apiKey
-      || cfg.lightId !== state.cfg.lightId || cfg.groupId !== state.cfg.groupId) return;
-  const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
-  if (!ep) return;
-  clearTimeout(state.timer);
-  state.timer = null;
-  state.statusBusy = true;
-  const generation = state.generation;
-  try {
-    const res = await httpRequest(cfg.ip, cfg.port, 'GET', ep.base, null, {}, 8000, state);
-    if (state.disposed || generation !== state.generation) return;
-    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-    const data = JSON.parse(res.body);
-    if (!data[ep.mode]) {
-      const error = Array.isArray(data) && data.find(item => item.error)?.error;
-      throw new Error(error ? `Hue API Fehler ${error.type}` : 'Ungültige Statusantwort');
+    if (state.disposed || state.statusBusy || Date.now() < state.retryAt)
+        return;
+    // Nachlaufende Befehle dürfen keine alte Bridge mehr abfragen.
+    if (
+        cfg.ip !== state.cfg.ip ||
+        cfg.port !== state.cfg.port ||
+        cfg.apiKey !== state.cfg.apiKey ||
+        cfg.lightId !== state.cfg.lightId ||
+        cfg.groupId !== state.cfg.groupId
+    )
+        return;
+    const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
+    if (!ep) return;
+    clearTimeout(state.timer);
+    state.timer = null;
+    state.statusBusy = true;
+    const generation = state.generation;
+    try {
+        const res = await httpRequest(
+            cfg.ip,
+            cfg.port,
+            "GET",
+            ep.base,
+            null,
+            {},
+            8000,
+            state,
+        );
+        if (state.disposed || generation !== state.generation) return;
+        if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+        const data = JSON.parse(res.body);
+        if (!data[ep.mode]) {
+            const error =
+                Array.isArray(data) && data.find((item) => item.error)?.error;
+            throw new Error(
+                error
+                    ? `Hue API Fehler ${error.type}`
+                    : "Ungültige Statusantwort",
+            );
+        }
+        state.failures = 0;
+        state.retryAt = 0;
+        state.lastError = null;
+        parseAndEmit(data, ep.mode, state, cfg);
+    } catch (e) {
+        if (state.disposed || generation !== state.generation) return;
+        state.failures++;
+        const retrySeconds = Math.min(
+            300,
+            10 * 2 ** Math.min(state.failures - 1, 5),
+        );
+        state.retryAt = Date.now() + retrySeconds * 1000;
+        if (state.prevEmitted.connected !== 0) {
+            state.prevEmitted.connected = 0;
+            state.emit?.("connected", 0);
+        }
+        state.setStatus?.(false);
+        // Gleiche Fehler höchstens alle fünf Minuten melden.
+        if (
+            state.lastError !== e.message ||
+            Date.now() - state.lastWarnAt >= 300000
+        ) {
+            state.warn?.(
+                `Status-Fehler: ${e.message} (Abfragepause ${retrySeconds} s)`,
+            );
+            state.lastError = e.message;
+            state.lastWarnAt = Date.now();
+        }
+    } finally {
+        if (!state.disposed && generation === state.generation) {
+            state.request = null;
+            state.statusBusy = false;
+            scheduleStatus(state);
+        }
     }
-    state.failures = 0;
-    state.retryAt = 0;
-    state.lastError = null;
-    parseAndEmit(data, ep.mode, state, cfg);
-  } catch (e) {
-    if (state.disposed || generation !== state.generation) return;
-    state.failures++;
-    const retrySeconds = Math.min(300, 10 * 2 ** Math.min(state.failures - 1, 5));
-    state.retryAt = Date.now() + retrySeconds * 1000;
-    if (state.prevEmitted.connected !== 0) {
-      state.prevEmitted.connected = 0;
-      state.emit?.('connected', 0);
-    }
-    state.setStatus?.(false);
-    // Gleiche Fehler höchstens alle fünf Minuten melden.
-    if (state.lastError !== e.message || Date.now() - state.lastWarnAt >= 300000) {
-      state.warn?.(`Status-Fehler: ${e.message} (Abfragepause ${retrySeconds} s)`);
-      state.lastError = e.message;
-      state.lastWarnAt = Date.now();
-    }
-  } finally {
-    if (!state.disposed && generation === state.generation) {
-      state.request = null;
-      state.statusBusy = false;
-      scheduleStatus(state);
-    }
-  }
 }
 
 function parseAndEmit(data, mode, state, cfg) {
-  if (!state.emit) return;
+    if (!state.emit) return;
 
-  // Gamut-Typ aus Lampen-Capabilities übernehmen
-  if (data.capabilities?.control?.colorgamuttype) {
-    state.gamutType = data.capabilities.control.colorgamuttype;
-  }
+    // Gamut-Typ aus Lampen-Capabilities übernehmen
+    if (data.capabilities?.control?.colorgamuttype) {
+        state.gamutType = data.capabilities.control.colorgamuttype;
+    }
 
-  const s = data[mode];
-  if (!s) return;
+    const s = data[mode];
+    if (!s) return;
 
-  state.setStatus?.(true);
+    state.setStatus?.(true);
 
-  // Only emit when value changed (send-by-change for polling)
-  const changed = (handle, value) => {
-    const cur = typeof value === 'object' ? JSON.stringify(value) : value;
-    if (state.prevEmitted[handle] === cur) return false;
-    state.prevEmitted[handle] = cur;
-    return true;
-  };
+    // Only emit when value changed (send-by-change for polling)
+    const changed = (handle, value) => {
+        const cur = typeof value === "object" ? JSON.stringify(value) : value;
+        if (state.prevEmitted[handle] === cur) return false;
+        state.prevEmitted[handle] = cur;
+        return true;
+    };
 
-  if (changed('connected', 1)) state.emit('connected', 1);
+    if (changed("connected", 1)) state.emit("connected", 1);
 
-  if (s.on    != null) { state.onoff = s.on;  if (changed('onOff',     s.on ? 1 : 0))       state.emit('onOff',      s.on ? 1 : 0); }
-  if (s.bri   != null) { state.bri   = s.bri; if (changed('brightness', briToPct(s.bri)))    state.emit('brightness', briToPct(s.bri)); }
-  if (s.sat   != null) { const v = briToPct(s.sat);  if (changed('saturation', v)) state.emit('saturation', v); }
-  if (s.ct    != null) { const v = ctToPct(s.ct);    if (changed('colorTemp',  v)) state.emit('colorTemp',  v); }
+    if (s.on != null) {
+        state.onoff = s.on;
+        if (changed("onOff", s.on ? 1 : 0)) state.emit("onOff", s.on ? 1 : 0);
+    }
+    if (s.bri != null) {
+        state.bri = s.bri;
+        if (changed("brightness", briToPct(s.bri)))
+            state.emit("brightness", briToPct(s.bri));
+    }
+    if (s.sat != null) {
+        const v = briToPct(s.sat);
+        if (changed("saturation", v)) state.emit("saturation", v);
+    }
+    if (s.ct != null) {
+        const v = ctToPct(s.ct);
+        if (changed("colorTemp", v)) state.emit("colorTemp", v);
+    }
 
-  // XY → RGB → Farbe
-  if (s.xy) {
-    const brightness = s.bri != null ? s.bri / 254 : 1;
-    const [r, g, b]  = xyToRGB(s.xy[0], s.xy[1], brightness);
-    const rPct = Math.round(r * 100 / 255);
-    const gPct = Math.round(g * 100 / 255);
-    const bPct = Math.round(b * 100 / 255);
-    const rRaw = Math.round(r), gRaw = Math.round(g), bRaw = Math.round(b);
+    // XY → RGB → Farbe
+    if (s.xy) {
+        const brightness = s.bri != null ? s.bri / 254 : 1;
+        const [r, g, b] = xyToRGB(s.xy[0], s.xy[1], brightness);
+        const rPct = Math.round((r * 100) / 255);
+        const gPct = Math.round((g * 100) / 255);
+        const bPct = Math.round((b * 100) / 255);
+        const rRaw = Math.round(r),
+            gRaw = Math.round(g),
+            bRaw = Math.round(b);
 
-    if (changed('red',   rPct)) state.emit('red',   rPct);
-    if (changed('green', gPct)) state.emit('green', gPct);
-    if (changed('blue',  bPct)) state.emit('blue',  bPct);
+        if (changed("red", rPct)) state.emit("red", rPct);
+        if (changed("green", gPct)) state.emit("green", gPct);
+        if (changed("blue", bPct)) state.emit("blue", bPct);
 
-    // RGB-Objekt für DPT232.600 (0–255 je Kanal)
-    const hsvObj = { red: rRaw, green: gRaw, blue: bRaw };
-    if (changed('hsv', hsvObj)) state.emit('hsv', hsvObj);
-  }
+        // RGB-Objekt für DPT232.600 (0–255 je Kanal)
+        const hsvObj = { red: rRaw, green: gRaw, blue: bRaw };
+        if (changed("hsv", hsvObj)) state.emit("hsv", hsvObj);
+    }
 }
 
 // ── Steuerungsbefehle ──────────────────────────────────────────────────────────
 
 async function setLightState(cfg, payload, state) {
-  const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
-  if (!ep) return;
-  const res = await httpRequest(cfg.ip, cfg.port, 'PUT', `${ep.base}/${ep.mode}`, payload);
-  // Hue API returns 200 even for logical errors – log them for debugging
-  if (res.status === 200 && state) {
-    try {
-      const body = JSON.parse(res.body);
-      const errs = body.filter?.((r) => r.error);
-      if (errs?.length) {
-        errs.forEach((r) => state.warn?.(`Hue API: ${r.error.description} (type ${r.error.type})`));
-      }
-    } catch (_) {}
-  }
+    const ep = buildEndpoint(cfg.apiKey, cfg.lightId, cfg.groupId);
+    if (!ep) return;
+    const res = await httpRequest(
+        cfg.ip,
+        cfg.port,
+        "PUT",
+        `${ep.base}/${ep.mode}`,
+        payload,
+    );
+    // Hue API returns 200 even for logical errors – log them for debugging
+    if (res.status === 200 && state) {
+        try {
+            const body = JSON.parse(res.body);
+            const errs = body.filter?.((r) => r.error);
+            if (errs?.length) {
+                errs.forEach((r) =>
+                    state.warn?.(
+                        `Hue API: ${r.error.description} (type ${r.error.type})`,
+                    ),
+                );
+            }
+        } catch (_) {}
+    }
 }
 
 async function cmdOnOff(cfg, state, value) {
-  const on = !!+value; // handles boolean true/false and numeric 0/1 and strings "0"/"1"
-  state.onoff = on;
+    const on = !!+value; // handles boolean true/false and numeric 0/1 and strings "0"/"1"
+    state.onoff = on;
 
-  const payload = { on };
+    const payload = { on };
 
-  // Intelli Start: Szene bei Einschalten setzen
-  if (on && cfg.intelliStart && cfg.scene) {
-    payload.scene = cfg.scene;
-  } else if (on && cfg.startBri > 0) {
-    // Starthelligkeit
-    payload.bri = pctToBri(cfg.startBri);
-  }
+    // Intelli Start: Szene bei Einschalten setzen
+    if (on && cfg.intelliStart && cfg.scene) {
+        payload.scene = cfg.scene;
+    } else if (on && cfg.startBri > 0) {
+        // Starthelligkeit
+        payload.bri = pctToBri(cfg.startBri);
+    }
 
-  await setLightState(cfg, payload);
+    await setLightState(cfg, payload);
 }
 
 async function cmdBrightness(cfg, pct) {
-  await setLightState(cfg, { bri: pctToBri(pct) });
+    await setLightState(cfg, { bri: pctToBri(pct) });
 }
 
 async function cmdSaturation(cfg, pct) {
-  await setLightState(cfg, { sat: pctToBri(pct) });
+    await setLightState(cfg, { sat: pctToBri(pct) });
 }
 
 async function cmdColorTemp(cfg, state, pct) {
-  const v = Math.min(100, Math.max(0, Number(pct) || 0));
-  await setLightState(cfg, { ct: pctToCT(v) }, state);
+    const v = Math.min(100, Math.max(0, Number(pct) || 0));
+    await setLightState(cfg, { ct: pctToCT(v) }, state);
 }
 
 async function cmdRGB(cfg, r, g, b, gamutKey) {
-  const R = Math.round(Math.min(100, Math.max(0, r)) * 255 / 100);
-  const G = Math.round(Math.min(100, Math.max(0, g)) * 255 / 100);
-  const B = Math.round(Math.min(100, Math.max(0, b)) * 255 / 100);
-  const xy = rgbToXY(R, G, B, gamutKey || 'B');
-  await setLightState(cfg, { xy });
+    const R = Math.round((Math.min(100, Math.max(0, r)) * 255) / 100);
+    const G = Math.round((Math.min(100, Math.max(0, g)) * 255) / 100);
+    const B = Math.round((Math.min(100, Math.max(0, b)) * 255) / 100);
+    const xy = rgbToXY(R, G, B, gamutKey || "B");
+    await setLightState(cfg, { xy });
 }
 
 async function cmdHsv(cfg, val, gamutKey) {
-  let r, g, b;
-  if (val !== null && typeof val === 'object') {
-    // DPT232.600 format: {red, green, blue} (0–255)
-    r = Math.round(val.red ?? 0);
-    g = Math.round(val.green ?? 0);
-    b = Math.round(val.blue ?? 0);
-  } else {
-    // Legacy packed RRGGBB integer
-    const n = parseInt(val, 10) || 0;
-    r = (n >> 16) & 0xFF;
-    g = (n >>  8) & 0xFF;
-    b =  n        & 0xFF;
-  }
-  // Use XY for accurate round-trip (same path as cmdRGB avoids HSV→XY→RGB drift)
-  const xy = rgbToXY(r, g, b, gamutKey || 'B');
-  await setLightState(cfg, { xy });
+    let r, g, b;
+    if (val !== null && typeof val === "object") {
+        // DPT232.600 format: {red, green, blue} (0–255)
+        r = Math.round(val.red ?? 0);
+        g = Math.round(val.green ?? 0);
+        b = Math.round(val.blue ?? 0);
+    } else {
+        // Legacy packed RRGGBB integer
+        const n = parseInt(val, 10) || 0;
+        r = (n >> 16) & 0xff;
+        g = (n >> 8) & 0xff;
+        b = n & 0xff;
+    }
+    // Use XY for accurate round-trip (same path as cmdRGB avoids HSV→XY→RGB drift)
+    const xy = rgbToXY(r, g, b, gamutKey || "B");
+    await setLightState(cfg, { xy });
 }
 
 async function cmdScene(cfg, scene) {
-  await setLightState(cfg, { scene: String(scene) });
+    await setLightState(cfg, { scene: String(scene) });
 }
 
 // KNX 4-Bit Relativdimmer (DPT 3.007):
 // Bit 3 = Richtung (1=heller, 0=dunkler), Bits 0–2 = Schrittweite (1–7)
 // Byte 0x00 = Stopp-Telegramm → ignorieren
 async function cmdDim(cfg, state, val) {
-  const byte = typeof val === 'number' ? val & 0xFF : parseInt(val, 10) & 0xFF;
-  const step = byte & 0x07;
-  if (step === 0) return; // Stopp-Telegramm
+    const byte =
+        typeof val === "number" ? val & 0xff : parseInt(val, 10) & 0xff;
+    const step = byte & 0x07;
+    if (step === 0) return; // Stopp-Telegramm
 
-  const direction = (byte & 0x08) ? 1 : -1;
-  const currentPct = briToPct(state.bri || 254);
-  const newPct = Math.max(0, Math.min(100, currentPct + direction * step));
-  await cmdBrightness(cfg, newPct);
+    const direction = byte & 0x08 ? 1 : -1;
+    const currentPct = briToPct(state.bri || 254);
+    const newPct = Math.max(0, Math.min(100, currentPct + direction * step));
+    await cmdBrightness(cfg, newPct);
 }
 
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
-  type:        'philips-hue',
-  category:    'Geräte',
-  label:       'Philips Hue',
-  description: 'Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1). Unterstützt Ein/Aus, Helligkeit, Sättigung, Farbtemperatur, RGB, HSV und Szenen.',
-  color:       '#f97316',
+    type: "philips-hue",
+    category: "Geräte",
+    label: "Philips Hue",
+    description:
+        "Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1). Unterstützt Ein/Aus, Helligkeit, Sättigung, Farbtemperatur, RGB, HSV und Szenen.",
+    color: "#f97316",
 
-  inputs: [
-    { handle: 'onOff',         label: 'Ein/Aus (0/1)' },
-    { handle: 'brightness',    label: 'Helligkeit (0–100 %)' },
-    { handle: 'saturation',    label: 'Sättigung (0–100 %)' },
-    { handle: 'colorTemp',     label: 'Farbtemperatur (0 = kalt … 100 = warm)' },
-    { handle: 'red',           label: 'Rot (0–100)' },
-    { handle: 'green',         label: 'Grün (0–100)' },
-    { handle: 'blue',          label: 'Blau (0–100)' },
-    { handle: 'hsv',           label: 'Farbe RGB (DPT232.600)' },
-    { handle: 'scene',         label: 'Szene (ID-String)' },
-    { handle: 'dim',           label: 'Dimmer (KNX 4-Bit DPT 3.007)' },
-    { handle: 'triggerStatus', label: 'Status abfragen (Trigger)' },
-  ],
+    inputs: [
+        { handle: "onOff", label: "Ein/Aus (0/1)" },
+        { handle: "brightness", label: "Helligkeit (0–100 %)" },
+        { handle: "saturation", label: "Sättigung (0–100 %)" },
+        {
+            handle: "colorTemp",
+            label: "Farbtemperatur (0 = kalt … 100 = warm)",
+        },
+        { handle: "red", label: "Rot (0–100)" },
+        { handle: "green", label: "Grün (0–100)" },
+        { handle: "blue", label: "Blau (0–100)" },
+        { handle: "hsv", label: "Farbe RGB (DPT232.600)" },
+        { handle: "scene", label: "Szene (ID-String)" },
+        { handle: "dim", label: "Dimmer (KNX 4-Bit DPT 3.007)" },
+        { handle: "triggerStatus", label: "Status abfragen (Trigger)" },
+    ],
 
-  outputs: [
-    { handle: 'connected',  label: 'Verbunden (0/1)' },
-    { handle: 'onOff',      label: 'Status Ein/Aus (0/1)' },
-    { handle: 'brightness', label: 'Helligkeit (0–100 %)' },
-    { handle: 'saturation', label: 'Sättigung (0–100 %)' },
-    { handle: 'colorTemp',  label: 'Farbtemperatur (0–100)' },
-    { handle: 'red',        label: 'Rot (0–100)' },
-    { handle: 'green',      label: 'Grün (0–100)' },
-    { handle: 'blue',       label: 'Blau (0–100)' },
-    { handle: 'hsv',        label: 'Farbe RGB (DPT232.600)' },
-  ],
+    outputs: [
+        { handle: "connected", label: "Verbunden (0/1)" },
+        { handle: "onOff", label: "Status Ein/Aus (0/1)" },
+        { handle: "brightness", label: "Helligkeit (0–100 %)" },
+        { handle: "saturation", label: "Sättigung (0–100 %)" },
+        { handle: "colorTemp", label: "Farbtemperatur (0–100)" },
+        { handle: "red", label: "Rot (0–100)" },
+        { handle: "green", label: "Grün (0–100)" },
+        { handle: "blue", label: "Blau (0–100)" },
+        { handle: "hsv", label: "Farbe RGB (DPT232.600)" },
+    ],
 
-  globalSettings: [
-    { key: 'ip',     label: 'Hue Bridge IP-Adresse',    type: 'text',     placeholder: '192.168.1.100' },
-    { key: 'port',   label: 'Port',                     type: 'number',   placeholder: '80' },
-    { key: 'apiKey', label: 'API Key (Bridge Username)', type: 'text',     placeholder: 'abc123def456...' },
-  ],
+    globalSettings: [
+        {
+            key: "ip",
+            label: "Hue Bridge IP-Adresse",
+            type: "text",
+            placeholder: "192.168.1.100",
+        },
+        { key: "port", label: "Port", type: "number", placeholder: "80" },
+        {
+            key: "apiKey",
+            label: "API Key (Bridge Username)",
+            type: "text",
+            placeholder: "abc123def456...",
+        },
+    ],
 
-  config: [
-    // ── Bridge-Einstellungen (überschreibt globale Einstellung) ───────────────
-    { key: 'ip',     label: 'Hue Bridge IP (überschreibt globale Einstellung)',    type: 'text',   placeholder: '192.168.1.100' },
-    { key: 'port',   label: 'Port (überschreibt globale Einstellung)',             type: 'number', placeholder: '80' },
-    { key: 'apiKey', label: 'API Key (überschreibt globale Einstellung)',          type: 'text',   placeholder: 'abc123def456...' },
+    config: [
+        // ── Bridge-Einstellungen (überschreibt globale Einstellung) ───────────────
+        {
+            key: "ip",
+            label: "Hue Bridge IP (überschreibt globale Einstellung)",
+            type: "text",
+            placeholder: "192.168.1.100",
+        },
+        {
+            key: "port",
+            label: "Port (überschreibt globale Einstellung)",
+            type: "number",
+            placeholder: "80",
+        },
+        {
+            key: "apiKey",
+            label: "API Key (überschreibt globale Einstellung)",
+            type: "text",
+            placeholder: "abc123def456...",
+        },
 
-    // ── Lampe / Gruppe ────────────────────────────────────────────────────────
-    { key: 'lightId', label: 'Lampen-ID (0 = deaktiviert)',  type: 'number', placeholder: '0' },
-    { key: 'groupId', label: 'Gruppen-ID (0 = deaktiviert)', type: 'number', placeholder: '0' },
+        // ── Lampe / Gruppe ────────────────────────────────────────────────────────
+        {
+            key: "lightId",
+            label: "Lampen-ID (0 = deaktiviert)",
+            type: "number",
+            placeholder: "0",
+        },
+        {
+            key: "groupId",
+            label: "Gruppen-ID (0 = deaktiviert)",
+            type: "number",
+            placeholder: "0",
+        },
 
-    // ── Farbeinstellungen ─────────────────────────────────────────────────────
-    {
-      key: 'gamut', label: 'Farbgamut', type: 'select',
-      options: [
-        { value: 'B', label: 'Gamut B – Hue A19, Standard (empfohlen)' },
-        { value: 'A', label: 'Gamut A – LivingColors, Bloom, Aura' },
-        { value: 'C', label: 'Gamut C – Hue Go, BR30, LightStrips+' },
-      ],
+        // ── Farbeinstellungen ─────────────────────────────────────────────────────
+        {
+            key: "gamut",
+            label: "Farbgamut",
+            type: "select",
+            options: [
+                {
+                    value: "B",
+                    label: "Gamut B – Hue A19, Standard (empfohlen)",
+                },
+                { value: "A", label: "Gamut A – LivingColors, Bloom, Aura" },
+                { value: "C", label: "Gamut C – Hue Go, BR30, LightStrips+" },
+            ],
+        },
+
+        // ── Einschaltverhalten ────────────────────────────────────────────────────
+        {
+            key: "intelliStart",
+            label: "Intelli Start (Szene beim Einschalten)",
+            type: "select",
+            options: [
+                { value: "0", label: "Nein" },
+                { value: "1", label: "Ja" },
+            ],
+        },
+        {
+            key: "scene",
+            label: "Szene bei Einschalten (ID-String)",
+            type: "text",
+            placeholder: "",
+        },
+        {
+            key: "startBri",
+            label: "Starthelligkeit % (0 = deaktiviert)",
+            type: "number",
+            placeholder: "0",
+        },
+
+        // ── Status-Polling ────────────────────────────────────────────────────────
+        {
+            key: "interval",
+            label: "Status-Intervall Sek. (leer = deaktiviert)",
+            type: "number",
+            placeholder: "",
+        },
+        {
+            key: "longPoll",
+            label: "Schnelles Status-Polling (mindestens 5 s)",
+            type: "select",
+            options: [
+                { value: "0", label: "Deaktiviert" },
+                { value: "1", label: "Aktiviert" },
+            ],
+        },
+    ],
+
+    // ── Ausführung ────────────────────────────────────────────────────────────────
+    execute(inputs, data, context) {
+        const nodeId = context.nodeId || "default";
+        const state = getState(nodeId);
+
+        // Emit-Referenzen immer aktuell halten (wichtig für laufende Timer)
+        state.emit = (h, v) => context.emitOutput(h, v);
+        state.warn = (...a) => context.warn(...a);
+        state.log = (...a) => context.log(...a);
+        state.nodeLog = (...a) => context.nodeLog(...a);
+        state.setStatus = (connected) => context.setNodeStatus(connected);
+
+        // Konfiguration normalisieren – lokale Einstellung hat Vorrang vor globaler
+        const cfg = {
+            ip:
+                String(data.ip || "").trim() ||
+                String(context.globalSetting("ip") || "").trim(),
+            port:
+                parseInt(data.port, 10) ||
+                parseInt(context.globalSetting("port"), 10) ||
+                80,
+            apiKey:
+                String(data.apiKey || "").trim() ||
+                String(context.globalSetting("apiKey") || "").trim(),
+            lightId: parseInt(data.lightId, 10) || 0,
+            groupId: parseInt(data.groupId, 10) || 0,
+            gamut: String(data.gamut || "B"),
+            intelliStart: Number(data.intelliStart) || 0,
+            scene: String(data.scene || "").trim(),
+            startBri: parseInt(data.startBri, 10) || 0,
+            interval: parseInt(data.interval, 10) || 0,
+            longPoll: Number(data.longPoll) || 0,
+        };
+        const previousCfg = state.cfg;
+        state.cfg = cfg;
+        const pollingChanged =
+            !previousCfg || pollDelay(previousCfg) !== pollDelay(cfg);
+
+        // Pflichtfelder prüfen
+        if (!cfg.ip) {
+            stopStatus(state);
+            context.warn("Hue Bridge IP-Adresse nicht konfiguriert");
+            return {};
+        }
+        if (!cfg.apiKey) {
+            stopStatus(state);
+            context.warn("API Key nicht konfiguriert");
+            return {};
+        }
+        if (cfg.lightId === 0 && cfg.groupId === 0) {
+            stopStatus(state);
+            context.warn("Weder Lampen-ID noch Gruppen-ID konfiguriert");
+            return {};
+        }
+
+        // Verbindungsparameter oder Lampen-ID geändert → alles zurücksetzen
+        const endpointChanged =
+            state.ip !== cfg.ip ||
+            state.port !== cfg.port ||
+            state.apiKey !== cfg.apiKey ||
+            state.lightId !== cfg.lightId ||
+            state.groupId !== cfg.groupId;
+
+        if (endpointChanged) {
+            state.ip = cfg.ip;
+            state.port = cfg.port;
+            state.apiKey = cfg.apiKey;
+            state.lightId = cfg.lightId;
+            state.groupId = cfg.groupId;
+            state.prevEmitted = {};
+            stopStatus(state);
+            state.failures = 0;
+            state.retryAt = 0;
+            state.lastError = null;
+        }
+
+        // Genau ein Polling-Timer; nächste Abfrage erst nach Abschluss der letzten.
+        if (endpointChanged || pollingChanged) {
+            clearTimeout(state.timer);
+            state.timer = null;
+            if (!state.statusBusy && pollDelay(cfg) > 0) {
+                if (Date.now() >= state.retryAt) void fetchStatus(cfg, state);
+                else scheduleStatus(state);
+            }
+        } else if (!state.statusBusy && !state.timer && pollDelay(cfg) > 0) {
+            scheduleStatus(state);
+        }
+
+        // ── Eingangsauswertung ────────────────────────────────────────────────────
+        const prev = state.prevInputs;
+        const changed = (key) =>
+            inputs[key] !== undefined && inputs[key] !== prev[key];
+        const gamut = state.gamutType || cfg.gamut;
+
+        // Status-Trigger
+        if (changed("triggerStatus")) {
+            fetchStatus(cfg, state);
+        }
+
+        // Ein/Aus
+        if (changed("onOff")) {
+            cmdOnOff(cfg, state, inputs.onOff)
+                .then(() => fetchStatus(cfg, state))
+                .catch((e) => context.warn(`Ein/Aus-Fehler: ${e.message}`));
+        }
+
+        // Helligkeit
+        if (changed("brightness")) {
+            cmdBrightness(cfg, inputs.brightness)
+                .then(() => fetchStatus(cfg, state))
+                .catch((e) => context.warn(`Helligkeit-Fehler: ${e.message}`));
+        }
+
+        // Sättigung
+        if (changed("saturation")) {
+            cmdSaturation(cfg, inputs.saturation).catch((e) =>
+                context.warn(`Sättigungs-Fehler: ${e.message}`),
+            );
+        }
+
+        // Farbtemperatur
+        if (changed("colorTemp")) {
+            cmdColorTemp(cfg, state, inputs.colorTemp).catch((e) =>
+                context.warn(`Farbtemperatur-Fehler: ${e.message}`),
+            );
+        }
+
+        // RGB – bei Änderung an einer Komponente alle drei senden
+        if (changed("red") || changed("green") || changed("blue")) {
+            cmdRGB(
+                cfg,
+                inputs.red != null ? inputs.red : prev.red || 0,
+                inputs.green != null ? inputs.green : prev.green || 0,
+                inputs.blue != null ? inputs.blue : prev.blue || 0,
+                gamut,
+            ).catch((e) => context.warn(`RGB-Fehler: ${e.message}`));
+        }
+
+        // HSV
+        if (changed("hsv")) {
+            cmdHsv(cfg, inputs.hsv, gamut).catch((e) =>
+                context.warn(`HSV-Fehler: ${e.message}`),
+            );
+        }
+
+        // Szene
+        if (changed("scene") && inputs.scene) {
+            cmdScene(cfg, inputs.scene).catch((e) =>
+                context.warn(`Szenen-Fehler: ${e.message}`),
+            );
+        }
+
+        // KNX 4-Bit Dimmer
+        if (changed("dim")) {
+            cmdDim(cfg, state, inputs.dim).catch((e) =>
+                context.warn(`Dimmer-Fehler: ${e.message}`),
+            );
+        }
+
+        state.prevInputs = { ...inputs };
+        return {};
     },
-
-    // ── Einschaltverhalten ────────────────────────────────────────────────────
-    {
-      key: 'intelliStart', label: 'Intelli Start (Szene beim Einschalten)', type: 'select',
-      options: [{ value: '0', label: 'Nein' }, { value: '1', label: 'Ja' }],
+    dispose(nodeId) {
+        for (const [id, state] of _states) {
+            if (nodeId != null && id !== nodeId) continue;
+            state.disposed = true;
+            stopStatus(state);
+            _states.delete(id);
+        }
     },
-    { key: 'scene',    label: 'Szene bei Einschalten (ID-String)', type: 'text',   placeholder: '' },
-    { key: 'startBri', label: 'Starthelligkeit % (0 = deaktiviert)', type: 'number', placeholder: '0' },
-
-    // ── Status-Polling ────────────────────────────────────────────────────────
-    { key: 'interval', label: 'Status-Intervall Sek. (leer = deaktiviert)', type: 'number', placeholder: '' },    {
-      key: 'longPoll', label: 'Schnelles Status-Polling (mindestens 5 s)', type: 'select',
-      options: [{ value: '0', label: 'Deaktiviert' }, { value: '1', label: 'Aktiviert' }],
-    },  ],
-
-  // ── Ausführung ────────────────────────────────────────────────────────────────
-  execute(inputs, data, context) {
-    const nodeId = context.nodeId || 'default';
-    const state  = getState(nodeId);
-
-    // Emit-Referenzen immer aktuell halten (wichtig für laufende Timer)
-    state.emit    = (h, v) => context.emitOutput(h, v);
-    state.warn    = (...a) => context.warn(...a);
-    state.log     = (...a) => context.log(...a);
-    state.nodeLog = (...a) => context.nodeLog(...a);
-    state.setStatus = (connected) => context.setNodeStatus(connected);
-
-    // Konfiguration normalisieren – lokale Einstellung hat Vorrang vor globaler
-    const cfg = {
-      ip:           (String(data.ip     || '').trim()) || String(context.globalSetting('ip')     || '').trim(),
-      port:         parseInt(data.port,  10) || parseInt(context.globalSetting('port'),  10) || 80,
-      apiKey:       (String(data.apiKey || '').trim()) || String(context.globalSetting('apiKey') || '').trim(),
-      lightId:      parseInt(data.lightId, 10) || 0,
-      groupId:      parseInt(data.groupId, 10) || 0,
-      gamut:        String(data.gamut    || 'B'),
-      intelliStart: parseInt(data.intelliStart, 10) || 0,
-      scene:        String(data.scene    || '').trim(),
-      startBri:     parseInt(data.startBri, 10) || 0,
-      interval:     parseInt(data.interval, 10) || 0,
-      longPoll:     parseInt(data.longPoll,  10) || 0,
-    };
-    const previousCfg = state.cfg;
-    state.cfg = cfg;
-    const pollingChanged = !previousCfg || pollDelay(previousCfg) !== pollDelay(cfg);
-
-    // Pflichtfelder prüfen
-    if (!cfg.ip)     { stopStatus(state); context.warn('Hue Bridge IP-Adresse nicht konfiguriert'); return {}; }
-    if (!cfg.apiKey) { stopStatus(state); context.warn('API Key nicht konfiguriert'); return {}; }
-    if (cfg.lightId === 0 && cfg.groupId === 0) {
-      stopStatus(state);
-      context.warn('Weder Lampen-ID noch Gruppen-ID konfiguriert');
-      return {};
-    }
-
-    // Verbindungsparameter oder Lampen-ID geändert → alles zurücksetzen
-    const endpointChanged = state.ip !== cfg.ip || state.port !== cfg.port
-      || state.apiKey !== cfg.apiKey
-      || state.lightId !== cfg.lightId || state.groupId !== cfg.groupId;
-
-    if (endpointChanged) {
-      state.ip          = cfg.ip;
-      state.port        = cfg.port;
-      state.apiKey      = cfg.apiKey;
-      state.lightId     = cfg.lightId;
-      state.groupId     = cfg.groupId;
-      state.prevEmitted = {};
-      stopStatus(state);
-      state.failures = 0;
-      state.retryAt = 0;
-      state.lastError = null;
-    }
-
-    // Genau ein Polling-Timer; nächste Abfrage erst nach Abschluss der letzten.
-    if (endpointChanged || pollingChanged) {
-      clearTimeout(state.timer);
-      state.timer = null;
-      if (!state.statusBusy && pollDelay(cfg) > 0) {
-        if (Date.now() >= state.retryAt) void fetchStatus(cfg, state);
-        else scheduleStatus(state);
-      }
-    } else if (!state.statusBusy && !state.timer && pollDelay(cfg) > 0) {
-      scheduleStatus(state);
-    }
-
-    // ── Eingangsauswertung ────────────────────────────────────────────────────
-    const prev    = state.prevInputs;
-    const changed = (key) => inputs[key] !== undefined && inputs[key] !== prev[key];
-    const gamut   = state.gamutType || cfg.gamut;
-
-    // Status-Trigger
-    if (changed('triggerStatus')) {
-      fetchStatus(cfg, state);
-    }
-
-    // Ein/Aus
-    if (changed('onOff')) {
-      cmdOnOff(cfg, state, inputs.onOff)
-        .then(() => fetchStatus(cfg, state))
-        .catch((e) => context.warn(`Ein/Aus-Fehler: ${e.message}`));
-    }
-
-    // Helligkeit
-    if (changed('brightness')) {
-      cmdBrightness(cfg, inputs.brightness)
-        .then(() => fetchStatus(cfg, state))
-        .catch((e) => context.warn(`Helligkeit-Fehler: ${e.message}`));
-    }
-
-    // Sättigung
-    if (changed('saturation')) {
-      cmdSaturation(cfg, inputs.saturation)
-        .catch((e) => context.warn(`Sättigungs-Fehler: ${e.message}`));
-    }
-
-    // Farbtemperatur
-    if (changed('colorTemp')) {
-      cmdColorTemp(cfg, state, inputs.colorTemp)
-        .catch((e) => context.warn(`Farbtemperatur-Fehler: ${e.message}`));
-    }
-
-    // RGB – bei Änderung an einer Komponente alle drei senden
-    if (changed('red') || changed('green') || changed('blue')) {
-      cmdRGB(
-        cfg,
-        inputs.red   != null ? inputs.red   : (prev.red   || 0),
-        inputs.green != null ? inputs.green : (prev.green || 0),
-        inputs.blue  != null ? inputs.blue  : (prev.blue  || 0),
-        gamut
-      ).catch((e) => context.warn(`RGB-Fehler: ${e.message}`));
-    }
-
-    // HSV
-    if (changed('hsv')) {
-      cmdHsv(cfg, inputs.hsv, gamut)
-        .catch((e) => context.warn(`HSV-Fehler: ${e.message}`));
-    }
-
-    // Szene
-    if (changed('scene') && inputs.scene) {
-      cmdScene(cfg, inputs.scene)
-        .catch((e) => context.warn(`Szenen-Fehler: ${e.message}`));
-    }
-
-    // KNX 4-Bit Dimmer
-    if (changed('dim')) {
-      cmdDim(cfg, state, inputs.dim)
-        .catch((e) => context.warn(`Dimmer-Fehler: ${e.message}`));
-    }
-
-    state.prevInputs = { ...inputs };
-    return {};
-  },
-  dispose(nodeId) {
-    for (const [id, state] of _states) {
-      if (nodeId != null && id !== nodeId) continue;
-      state.disposed = true;
-      stopStatus(state);
-      _states.delete(id);
-    }
-  },
 };

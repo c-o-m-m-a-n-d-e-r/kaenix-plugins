@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -748,9 +748,9 @@ module.exports = {
             channel: parseInt(data.channel, 10) || 0,
             type: String(data.type || "relay"),
             interval: parseInt(data.interval, 10) || 0,
-            dimmOn: parseInt(data.dimmOn, 10) || 0,
-            dimmOff: parseInt(data.dimmOff, 10) || 0,
-            autoFw: parseInt(data.autoFwUpdate, 10) || 0,
+            dimmOn: Number(data.dimmOn) || 0,
+            dimmOff: Number(data.dimmOff) || 0,
+            autoFw: Number(data.autoFwUpdate) || 0,
             rgbwRange: String(data.rgbwRange || "percent"),
             username: String(data.username || "").trim(),
             password: String(data.password || "").trim(),
@@ -803,14 +803,14 @@ module.exports = {
         }
 
         // FW-Update
-        if (changed("fwUpdate") && inputs.fwUpdate) {
+        if (changed("fwUpdate") && [true, 1, "1"].includes(inputs.fwUpdate)) {
             cmdFwUpdate(state, cfg).catch((e) =>
                 commandError("FW-Update Fehler", e),
             );
         }
 
         // Neustart
-        if (changed("reboot") && inputs.reboot) {
+        if (changed("reboot") && [true, 1, "1"].includes(inputs.reboot)) {
             cmdReboot(state, cfg).catch((e) =>
                 commandError("Neustart-Fehler", e),
             );
@@ -857,13 +857,15 @@ module.exports = {
 
         // Jalousie Auf/Zu
         if (changed("openClose")) {
-            cmdCover(state, cfg, inputs.openClose ? "open" : "close").catch(
-                (e) => commandError("Jalousie-Fehler", e),
-            );
+            cmdCover(
+                state,
+                cfg,
+                [true, 1, "1"].includes(inputs.openClose) ? "open" : "close",
+            ).catch((e) => commandError("Jalousie-Fehler", e));
         }
 
         // Jalousie Stop
-        if (changed("stop") && inputs.stop) {
+        if (changed("stop") && [true, 1, "1"].includes(inputs.stop)) {
             cmdCover(state, cfg, "stop").catch((e) =>
                 commandError("Jalousie-Stop-Fehler", e),
             );
