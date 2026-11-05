@@ -1,0 +1,8 @@
+{
+    "name": "kaenix-plugin-eufy",
+    "version": "1.0.1",
+    "private": true,
+    "dependencies": {
+        "eufy-security-client": "3.8.0"
+    }
+}

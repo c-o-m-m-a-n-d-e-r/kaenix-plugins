@@ -6,9 +6,12 @@
 !/CNAME
 !/README.md
 
-# Nur Plugin-Dateien in den direkten Plugin-Unterordnern zulassen.
+# Plugin-Einstiegspunkte und reproduzierbare Abhängigkeiten zulassen.
 !/*/
 !/*/*-kaenix.js
+!/*/package.json
+!/*/package-lock.json
+!/eufy/README.md
 
 # Eigener GitHub-Pages-Workflow für die Plugin-Veröffentlichung.
 !/.github/

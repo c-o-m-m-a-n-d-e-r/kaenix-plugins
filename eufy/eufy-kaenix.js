@@ -1,12 +1,116 @@
 /**
  * @plugin Eufy Kameras
- * @version 1.0.0
+ * @version 1.0.1
  * @author kaenix
  */
 const { spawn } = require("node:child_process");
 const { PassThrough } = require("node:stream");
 const fs = require("node:fs");
 const path = require("node:path");
+
+const CLIENT_VERSION = "3.8.0";
+const NETWORK_CODES = new Set([
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "ENETUNREACH",
+    "EHOSTUNREACH",
+    "ERR_TLS_CERT_ALTNAME_INVALID",
+    "CERT_HAS_EXPIRED",
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+]);
+const ERROR_TYPES = new Set([
+    "Error",
+    "TypeError",
+    "SyntaxError",
+    "RangeError",
+    "ApiResponseCodeError",
+    "ApiInvalidResponseError",
+    "ApiHTTPResponseCodeError",
+    "ApiGenericError",
+    "ApiBaseLoadError",
+    "ApiRequestError",
+    "HTTPError",
+    "RequestError",
+    "TimeoutError",
+    "InvalidCountryCodeError",
+    "EufyDependencyOutdatedError",
+]);
+
+// Never serialize provider messages, request options, URLs, stacks or response bodies.
+function safeLoginFailure(
+    error,
+    phase,
+    nodeVersion,
+    sdkVersion = CLIENT_VERSION,
+) {
+    const diagnostic = { phase, sdk: sdkVersion, node: nodeVersion };
+    const seen = new Set();
+    for (
+        let current = error;
+        current && seen.size < 5 && !seen.has(current);
+        current = current.cause
+    ) {
+        seen.add(current);
+        if (!diagnostic.type && ERROR_TYPES.has(current.name))
+            diagnostic.type = current.name;
+        const apiCode = current.context?.code;
+        if (
+            Number.isSafeInteger(apiCode) &&
+            Math.abs(apiCode) <= 2147483647 &&
+            diagnostic.api === undefined
+        )
+            diagnostic.api = apiCode;
+        const status = current.context?.status ?? current.response?.statusCode;
+        if (
+            Number.isInteger(status) &&
+            status >= 100 &&
+            status <= 599 &&
+            diagnostic.http === undefined
+        )
+            diagnostic.http = status;
+        if (NETWORK_CODES.has(current.code)) diagnostic.network = current.code;
+        if (current.code === "MODULE_NOT_FOUND") diagnostic.module = "missing";
+        if (
+            [
+                "ERR_REQUIRE_ESM",
+                "ERR_REQUIRE_ASYNC_MODULE",
+                "ERR_UNKNOWN_BUILTIN_MODULE",
+            ].includes(current.code)
+        )
+            diagnostic.module = "incompatible";
+    }
+    let key =
+        phase === "initialize"
+            ? "eufy_sdk_init_failed"
+            : "eufy_connection_failed";
+    if (diagnostic.module === "missing") key = "eufy_dependency_missing";
+    else if (
+        diagnostic.module === "incompatible" ||
+        Number(nodeVersion.split(".")[0]) < 20
+    )
+        key = "eufy_runtime_unsupported";
+    else if (diagnostic.type === "EufyDependencyOutdatedError")
+        key = "eufy_dependency_outdated";
+    else if (diagnostic.network || diagnostic.type === "TimeoutError")
+        key = "eufy_network_failed";
+    else if (
+        diagnostic.http === 429 ||
+        [100028, 250999].includes(diagnostic.api)
+    )
+        key = "eufy_rate_limited";
+    else if ([26006, 26055, 22008].includes(diagnostic.api))
+        key = "eufy_auth_rejected";
+    return {
+        key,
+        code: Object.entries(diagnostic)
+            .map(([name, value]) => `${name}=${value}`)
+            .join("; "),
+    };
+}
 
 function waitFor(client, events, action, { signal, timeout = 25000 } = {}) {
     return new Promise((resolve, reject) => {
@@ -34,14 +138,25 @@ function waitFor(client, events, action, { signal, timeout = 25000 } = {}) {
         if (signal?.aborted) return abort();
         Promise.resolve()
             .then(action)
-            .catch(() => finish(new Error("eufy_connection_failed")));
+            .catch((error) =>
+                finish(
+                    error instanceof Error
+                        ? error
+                        : new Error("eufy_connection_failed"),
+                ),
+            );
     });
 }
 
 class EufyProvider {
-    constructor(context, { sdk, spawnProcess = spawn } = {}) {
+    constructor(
+        context,
+        { sdk, spawnProcess = spawn, nodeVersion = process.versions.node } = {},
+    ) {
         this.context = context;
         this.sdk = sdk;
+        this.nodeVersion = nodeVersion;
+        this.sdkVersion = CLIENT_VERSION;
         this.spawnProcess = spawnProcess;
         this.status = "eufy_disconnected";
         this.sessions = new Map();
@@ -49,14 +164,31 @@ class EufyProvider {
         this.controller = new AbortController();
     }
 
+    recordFailure(error, phase) {
+        const failure = safeLoginFailure(
+            error,
+            phase,
+            this.nodeVersion,
+            this.sdkVersion,
+        );
+        this.status = failure.key;
+        this.diagnosticCode = failure.code;
+        this.context.warn?.(failure.code);
+        return new Error(failure.key);
+    }
+
     async getClient() {
         if (this.disposed) throw new Error("camera_provider_unavailable");
         if (this.initializing) return this.initializing;
-        const username = this.context.globalSetting("username");
+        const username = String(
+            this.context.globalSetting("username") || "",
+        ).trim();
         const password = this.context.globalSetting("password");
         if (!username || !password)
             throw new Error("eufy_credentials_required");
-        const country = this.context.globalSetting("country") || "DE";
+        const country = String(this.context.globalSetting("country") || "DE")
+            .trim()
+            .toUpperCase();
         if (!/^[A-Z]{2}$/.test(country))
             throw new Error("eufy_country_invalid");
         const account = JSON.stringify([username, password, country]);
@@ -71,7 +203,20 @@ class EufyProvider {
         }
         this.account = account;
         this.initializing = (async () => {
+            if (Number(this.nodeVersion.split(".")[0]) < 20)
+                throw new Error("eufy_runtime_unsupported");
             const sdk = this.sdk || require("eufy-security-client");
+            if (
+                typeof sdk.libVersion === "string" &&
+                /^\d+\.\d+\.\d+$/.test(sdk.libVersion)
+            ) {
+                this.sdkVersion = sdk.libVersion;
+                if (sdk.libVersion !== CLIENT_VERSION) {
+                    const error = new Error("eufy_dependency_outdated");
+                    error.name = "EufyDependencyOutdatedError";
+                    throw error;
+                }
+            }
             const client = await sdk.EufySecurity.initialize({
                 username,
                 password,
@@ -94,6 +239,7 @@ class EufyProvider {
             client.on("connect", () => {
                 this.status = "eufy_connected";
                 this.captcha = null;
+                this.diagnosticCode = null;
             });
             client.on("close", () => {
                 this.status = "eufy_disconnected";
@@ -105,8 +251,8 @@ class EufyProvider {
                 this.status = "eufy_captcha_required";
                 this.captcha = { id, image };
             });
-            client.on("connection error", () => {
-                this.status = "eufy_connection_failed";
+            client.on("connection error", (error) => {
+                this.recordFailure(error, "login");
             });
             client.on(
                 "station livestream start",
@@ -126,8 +272,10 @@ class EufyProvider {
             );
             return client;
         })()
-            .catch(() => {
-                throw new Error("eufy_connection_failed");
+            .catch((error) => {
+                if (this.disposed)
+                    throw new Error("camera_provider_unavailable");
+                throw this.recordFailure(error, "initialize");
             })
             .finally(() => {
                 this.initializing = null;
@@ -143,6 +291,7 @@ class EufyProvider {
             if (client.isConnected() && !options.verifyCode && !options.captcha)
                 return { message: "eufy_connected" };
             this.status = "eufy_connecting";
+            this.diagnosticCode = null;
             const response = await waitFor(
                 client,
                 {
@@ -155,8 +304,31 @@ class EufyProvider {
                 { signal: this.controller.signal },
             );
             if (response.event === "connection error")
-                throw new Error("eufy_connection_failed");
+                throw new Error(this.status);
             return { message: this.status };
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                new Set([
+                    "eufy_credentials_required",
+                    "eufy_country_invalid",
+                    "eufy_runtime_unsupported",
+                    "eufy_dependency_outdated",
+                    "eufy_sdk_init_failed",
+                    "eufy_dependency_missing",
+                    "eufy_network_failed",
+                    "eufy_rate_limited",
+                    "eufy_auth_rejected",
+                    "eufy_timeout",
+                    "eufy_stream_unavailable",
+                    "eufy_connection_failed",
+                    "camera_provider_unavailable",
+                ]).has(error.message)
+            ) {
+                if (!this.disposed) this.status = error.message;
+                throw error;
+            }
+            throw this.recordFailure(error, "login");
         } finally {
             this.loginPending = false;
         }
@@ -352,6 +524,7 @@ class EufyProvider {
         return {
             hideSave: true,
             status: this.status,
+            diagnosticCode: this.diagnosticCode,
             visibleActionKeys: connected
                 ? ["logout"]
                 : this.status === "eufy_mfa_required"
@@ -386,7 +559,8 @@ module.exports = {
     label: "Eufy",
     category: "Kameras",
     description: "eufy_plugin_description",
-    version: "1.0.0",
+    version: "1.0.1",
+    requiresDependencies: true,
     globalSettings: [
         { key: "username", label: "eufy_username", type: "text" },
         {
@@ -470,5 +644,5 @@ module.exports = {
         }
         throw new Error("camera_provider_invalid");
     },
-    _testing: { EufyProvider, waitFor },
+    _testing: { EufyProvider, waitFor, safeLoginFailure },
 };
