@@ -1,7 +1,10 @@
 # kaenix Plugins
 
-Plugins erweitern den **Logic Editor** von kaenix um eigene Node-Typen.  
-Jedes Plugin ist eine einzelne JavaScript-Datei und wird beim Start automatisch geladen.
+Plugins erweitern den **Logic Editor** um eigene Node-Typen oder stellen als
+**Kamera-Plugin** eigenständige Kamerasystem-Anbindungen bereit. Kamera-Plugins
+laufen unabhängig von Logikdatenblättern. Einstiegspunkt ist eine JavaScript-Datei;
+optionale npm-Abhängigkeiten werden über `package.json` und `package-lock.json`
+mitgeliefert. Ein Beispiel ist [Eufy](eufy/README.md).
 
 ---
 
@@ -21,21 +24,21 @@ Der Ordnername spielt keine Rolle – erkannt werden alle Dateien, die auf `-kae
 
 ```js
 module.exports = {
-  type:        'mein-plugin',          // eindeutiger Typ-Bezeichner (kebab-case)
-  category:    'Eigene',               // Gruppe im Node-Menü
-  label:       'Mein Plugin',          // Anzeigename
-  description: 'Was dieses Plugin tut',
-  color:       '#6366f1',              // Header-Farbe der Node (Hex)
+    type: "mein-plugin", // eindeutiger Typ-Bezeichner (kebab-case)
+    category: "Eigene", // Gruppe im Node-Menü
+    label: "Mein Plugin", // Anzeigename
+    description: "Was dieses Plugin tut",
+    color: "#6366f1", // Header-Farbe der Node (Hex)
 
-  inputs:  [{ handle: 'in',  label: 'Eingang' }],
-  outputs: [{ handle: 'out', label: 'Ausgang' }],
+    inputs: [{ handle: "in", label: "Eingang" }],
+    outputs: [{ handle: "out", label: "Ausgang" }],
 
-  config: [],                          // Konfigurationsfelder (siehe unten)
+    config: [], // Konfigurationsfelder (siehe unten)
 
-  execute(inputs, data, context) {
-    // Logik hier
-    return inputs.in;                  // Einzelwert → geht an outputs.out
-  },
+    execute(inputs, data, context) {
+        // Logik hier
+        return inputs.in; // Einzelwert → geht an outputs.out
+    },
 };
 ```
 
@@ -44,19 +47,24 @@ module.exports = {
 ## Felder im Detail
 
 ### `type` _(string, Pflicht)_
+
 Eindeutiger Bezeichner in kebab-case. Darf nur einmal vorkommen.
 
 ### `category` _(string)_
+
 Gruppenname im "Node hinzufügen"-Panel, z.B. `'Automatisierung'`, `'Mathematik'`, `'Benachrichtigung'`.
 
 ### `label` / `description`
+
 `label` erscheint als Node-Titel im Logic-Editor.  
 `description` ist nur in der Detailansicht sichtbar (nicht auf der Node selbst).
 
 ### `color` _(CSS Hex-Farbe)_
+
 Header-Farbe der Node, z.B. `'#f59e0b'`. Plugins der Kategorie `Geräte` verwenden einheitlich Orange (`#f97316`).
 
 ### `inputs` / `outputs`
+
 Arrays von Handle-Definitionen:
 
 ```js
@@ -74,20 +82,30 @@ outputs: [
 `label` ist der Anzeigetext neben dem Verbindungspunkt.
 
 ### `config`
+
 Felder, die der Nutzer pro Node-Instanz konfigurieren kann:
 
 ```js
 config: [
-  { key: 'zeitSekunden', label: 'Zeit in Sekunden', type: 'number', default: 60, placeholder: '60' },
-  { key: 'modus',        label: 'Modus', type: 'select',
-    options: [
-      { value: 'auto',    label: 'Automatisch' },
-      { value: 'manuell', label: 'Manuell'     },
-    ]
-  },
-  { key: 'text',  label: 'Nachricht', type: 'text'     },
-  { key: 'token', label: 'API Token', type: 'password' },
-]
+    {
+        key: "zeitSekunden",
+        label: "Zeit in Sekunden",
+        type: "number",
+        default: 60,
+        placeholder: "60",
+    },
+    {
+        key: "modus",
+        label: "Modus",
+        type: "select",
+        options: [
+            { value: "auto", label: "Automatisch" },
+            { value: "manuell", label: "Manuell" },
+        ],
+    },
+    { key: "text", label: "Nachricht", type: "text" },
+    { key: "token", label: "API Token", type: "password" },
+];
 ```
 
 Verfügbare `type`-Werte: `text`, `number`, `password`, `select`, `checkbox`.
@@ -113,6 +131,7 @@ dynamicOutputs(data) {
 > `dynamicOutputs` ersetzt `outputs`. Wird `dynamicOutputs` definiert, wird `outputs` ignoriert.
 
 ### `globalSettings`
+
 Einstellungen, die einmalig pro Plugin-Typ gelten (z.B. API-Keys).  
 Syntax identisch zu `config`. Zugriff via `context.globalSetting(key)`.
 
@@ -128,11 +147,11 @@ globalSettings: [
 
 Wird aufgerufen, wenn ein Eingangssignal eintrifft.
 
-| Parameter | Inhalt |
-|-----------|--------|
+| Parameter | Inhalt                                                                       |
+| --------- | ---------------------------------------------------------------------------- |
 | `inputs`  | Objekt mit den aktuellen Eingangs-Werten, z.B. `inputs.trigger`, `inputs.in` |
-| `data`    | Konfigurationswerte der Node (aus `config`), z.B. `data.zeitSekunden` |
-| `context` | Helper-Objekt (siehe unten) |
+| `data`    | Konfigurationswerte der Node (aus `config`), z.B. `data.zeitSekunden`        |
+| `context` | Helper-Objekt (siehe unten)                                                  |
 
 ### Rückgabewert
 
@@ -154,9 +173,9 @@ return {};
 ### Logging
 
 ```js
-context.log('Wert empfangen:', inputs.in);   // Eintrag im Script-Log-Panel
-context.warn('Achtung:', inputs.in);          // Wie log, aber mit [warn]-Präfix
-context.nodeLog('⏱ 42s');                    // Kurztext direkt auf der Node (max. 3 Zeilen)
+context.log("Wert empfangen:", inputs.in); // Eintrag im Script-Log-Panel
+context.warn("Achtung:", inputs.in); // Wie log, aber mit [warn]-Präfix
+context.nodeLog("⏱ 42s"); // Kurztext direkt auf der Node (max. 3 Zeilen)
 ```
 
 ### Asynchrone Ausgabe
@@ -164,14 +183,14 @@ context.nodeLog('⏱ 42s');                    // Kurztext direkt auf der Node (
 Für Ausgaben nach einem Timer oder HTTP-Call (der Rückgabewert von `execute` ist dann `{}`):
 
 ```js
-context.emitOutput('status', 1);   // handle-Name, Wert
+context.emitOutput("status", 1); // handle-Name, Wert
 ```
 
 ### Globale Einstellungen
 
 ```js
-const token = context.globalSetting('apiToken');
-context.setGlobalSetting('letzterWert', 42);
+const token = context.globalSetting("apiToken");
+context.setGlobalSetting("letzterWert", 42);
 ```
 
 ### HomeServer-Adresse
@@ -183,7 +202,7 @@ Der Zugriff ist lesend und stellt keine anderen Systemeinstellungen bereit.
 ### Node-ID
 
 ```js
-const nodeId = context.nodeId;   // Eindeutige ID der Node-Instanz (string)
+const nodeId = context.nodeId; // Eindeutige ID der Node-Instanz (string)
 ```
 
 ---
@@ -193,6 +212,7 @@ const nodeId = context.nodeId;   // Eindeutige ID der Node-Instanz (string)
 `execute` kann asynchrone Operationen starten. Wichtig: `return {}` sofort, Ausgaben über `context.emitOutput`.
 
 **Timer-Beispiel:**
+
 ```js
 execute(inputs, data, context) {
   if (!inputs.trigger) return {};
@@ -207,6 +227,7 @@ execute(inputs, data, context) {
 ```
 
 **HTTP-Fetch-Beispiel:**
+
 ```js
 execute(inputs, data, context) {
   fetch('https://api.example.com/data')
@@ -231,23 +252,23 @@ Damit Timers und Zustände pro Node-Instanz getrennt laufen:
 const _states = {};
 
 function getState(nodeId) {
-  if (!_states[nodeId]) _states[nodeId] = { timer: null };
-  return _states[nodeId];
+    if (!_states[nodeId]) _states[nodeId] = { timer: null };
+    return _states[nodeId];
 }
 
 module.exports = {
-  // ...
-  execute(inputs, data, context) {
-    const nodeId = context.nodeId || 'default';
-    const s = getState(nodeId);
+    // ...
+    execute(inputs, data, context) {
+        const nodeId = context.nodeId || "default";
+        const s = getState(nodeId);
 
-    clearTimeout(s.timer);
-    s.timer = setTimeout(() => {
-      context.emitOutput('out', 1);
-    }, 1000);
+        clearTimeout(s.timer);
+        s.timer = setTimeout(() => {
+            context.emitOutput("out", 1);
+        }, 1000);
 
-    return {};
-  },
+        return {};
+    },
 };
 ```
 
@@ -262,31 +283,31 @@ module.exports = {
  * @author    Dein Name
  */
 module.exports = {
-  type:        'scaler',
-  category:    'Mathematik',
-  label:       'Scaler',
-  description: 'Skaliert einen Wert: (in × Faktor) + Offset',
-  color:       '#0d9488',
+    type: "scaler",
+    category: "Mathematik",
+    label: "Scaler",
+    description: "Skaliert einen Wert: (in × Faktor) + Offset",
+    color: "#0d9488",
 
-  inputs:  [{ handle: 'in',  label: 'Wert'     }],
-  outputs: [{ handle: 'out', label: 'Ergebnis' }],
+    inputs: [{ handle: "in", label: "Wert" }],
+    outputs: [{ handle: "out", label: "Ergebnis" }],
 
-  config: [
-    { key: 'factor', label: 'Faktor',            type: 'number' },
-    { key: 'offset', label: 'Offset',            type: 'number' },
-    { key: 'digits', label: 'Nachkommastellen',  type: 'number' },
-  ],
+    config: [
+        { key: "factor", label: "Faktor", type: "number" },
+        { key: "offset", label: "Offset", type: "number" },
+        { key: "digits", label: "Nachkommastellen", type: "number" },
+    ],
 
-  execute(inputs, data, context) {
-    const val    = parseFloat(inputs.in  ?? 0);
-    const factor = parseFloat(data.factor ?? 1);
-    const offset = parseFloat(data.offset ?? 0);
-    const digits = parseInt(data.digits   ?? 1, 10);
+    execute(inputs, data, context) {
+        const val = parseFloat(inputs.in ?? 0);
+        const factor = parseFloat(data.factor ?? 1);
+        const offset = parseFloat(data.offset ?? 0);
+        const digits = parseInt(data.digits ?? 1, 10);
 
-    const result = parseFloat((val * factor + offset).toFixed(digits));
-    context.log(`${val} × ${factor} + ${offset} = ${result}`);
-    return result;
-  },
+        const result = parseFloat((val * factor + offset).toFixed(digits));
+        context.log(`${val} × ${factor} + ${offset} = ${result}`);
+        return result;
+    },
 };
 ```
 
@@ -294,37 +315,37 @@ module.exports = {
 
 ## Namenskonvention
 
-| Was              | Konvention                        | Beispiel                        |
-|------------------|-----------------------------------|---------------------------------|
-| Dateiname        | `<name>-kaenix.js`                | `mein-plugin-kaenix.js`         |
-| `type`           | kebab-case, eindeutig             | `mein-plugin`                   |
-| `handle`-Namen   | lowercase, keine Leerzeichen      | `trigger`, `restzeit`           |
-| `config`-Keys    | camelCase                         | `zeitSekunden`, `apiToken`      |
+| Was            | Konvention                   | Beispiel                   |
+| -------------- | ---------------------------- | -------------------------- |
+| Dateiname      | `<name>-kaenix.js`           | `mein-plugin-kaenix.js`    |
+| `type`         | kebab-case, eindeutig        | `mein-plugin`              |
+| `handle`-Namen | lowercase, keine Leerzeichen | `trigger`, `restzeit`      |
+| `config`-Keys  | camelCase                    | `zeitSekunden`, `apiToken` |
 
 ---
 
 ## Mitgelieferte Plugins
 
-| Plugin | Typ | Kategorie | Beschreibung |
-|--------|-----|-----------|------------------|
-| **MQTT Client** | `mqtt-client` | Datenaustausch | Sendet und empfängt Nachrichten auf einem Topic; [Dokumentation](mqtt-client/README.md) |
-| **Scaler** | `scaler` | Mathematik | Skaliert einen Wert: `(in × Faktor) + Offset` |
-| **Hysterese** | `hysteresis` | Logik | Zweipunktregelung mit Totband (Unter-/Obergrenze) |
-| **Treppenhauslicht** | `treppenhauslicht` | Automatisierung | Schaltet ein Licht für konfigurierbare Zeit nach Trigger |
-| **Lauflicht** | `lauflicht` | Automatisierung | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung |
-| **BWM** | `bwm` | Automatisierung | Bewegungsmelder mit Helligkeitsschwelle, Nachlaufzeit und Grundbeleuchtung |
-| **Heizung** | `heizung` | Energie | PI-Raumtemperaturregelung mit Ventil- und Solltemperaturausgang; [Dokumentation](heizung/README.md) |
-| **Heizstab** | `heizstab` | Energie | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung |
-| **Mischer** | `mischer` | Energie | Regelt ein 3-Wege-Mischventil zyklisch mit gedämpften Stellschritten und Pumpenabschaltung |
-| **Push** | `push` | Benachrichtigung | Sendet Web-Push-Benachrichtigungen |
-| **CallMeBot** | `callmebot` | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API |
-| **Nuki** | `nuki` | Geräte | Steuert Smart Locks über Bridge, MQTT oder Nuki Web; [Dokumentation](nuki/README.md) |
-| **Shelly** | `shelly` | Geräte | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren) |
-| **Philips Hue** | `philips-hue` | Geräte | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1) |
-| **Philips Air Plus** | `philips-air-plus` | Geräte | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus) |
-| **Bambu Lab H2** | `bambu-lab-h2` | Geräte | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md) |
-| **Lyngdorf MP-60** | `lyngdorf` | Geräte | Hauptzone über TCP: Power, Lautstärke in Prozent, Quellen, RoomPerfect, Voicing und Audiomodus; [Dokumentation](lyngdorf/README.md) |
-| **Leica Cine 1** | `leica-cine1` | Geräte | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT; eingebautes Client-Zertifikat, automatische PIN-Übermittlung und gespeicherte Kopplung; [Dokumentation](leica-cine1/README.md) |
+| Plugin               | Typ                | Kategorie        | Beschreibung                                                                                                                                                                    |
+| -------------------- | ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MQTT Client**      | `mqtt-client`      | Datenaustausch   | Sendet und empfängt Nachrichten auf einem Topic; [Dokumentation](mqtt-client/README.md)                                                                                         |
+| **Scaler**           | `scaler`           | Mathematik       | Skaliert einen Wert: `(in × Faktor) + Offset`                                                                                                                                   |
+| **Hysterese**        | `hysteresis`       | Logik            | Zweipunktregelung mit Totband (Unter-/Obergrenze)                                                                                                                               |
+| **Treppenhauslicht** | `treppenhauslicht` | Automatisierung  | Schaltet ein Licht für konfigurierbare Zeit nach Trigger                                                                                                                        |
+| **Lauflicht**        | `lauflicht`        | Automatisierung  | Schaltet N Ausgänge nacheinander ein/aus mit einstellbarer Verzögerung                                                                                                          |
+| **BWM**              | `bwm`              | Automatisierung  | Bewegungsmelder mit Helligkeitsschwelle, Nachlaufzeit und Grundbeleuchtung                                                                                                      |
+| **Heizung**          | `heizung`          | Energie          | PI-Raumtemperaturregelung mit Ventil- und Solltemperaturausgang; [Dokumentation](heizung/README.md)                                                                             |
+| **Heizstab**         | `heizstab`         | Energie          | Steuert einen PV-Überschuss-Heizstab mit bis zu 3 Phasen, Boost und Temperaturüberwachung                                                                                       |
+| **Mischer**          | `mischer`          | Energie          | Regelt ein 3-Wege-Mischventil zyklisch mit gedämpften Stellschritten und Pumpenabschaltung                                                                                      |
+| **Push**             | `push`             | Benachrichtigung | Sendet Web-Push-Benachrichtigungen                                                                                                                                              |
+| **CallMeBot**        | `callmebot`        | Benachrichtigung | Sendet WhatsApp-Nachrichten via CallMeBot-API                                                                                                                                   |
+| **Nuki**             | `nuki`             | Geräte           | Steuert Smart Locks über Bridge, MQTT oder Nuki Web; [Dokumentation](nuki/README.md)                                                                                            |
+| **Shelly**           | `shelly`           | Geräte           | Steuert Shelly-Geräte Gen 1–4 (Relay, Dimmer, RGBW, Jalousie, Sensoren)                                                                                                         |
+| **Philips Hue**      | `philips-hue`      | Geräte           | Steuert Philips Hue Lampen und Gruppen über die Hue Bridge (API v1)                                                                                                             |
+| **Philips Air Plus** | `philips-air-plus` | Geräte           | Steuert AC0651/10 und AC2220/10 über Air+ Cloud/MQTT; gemeinsame Geräteliste und Anmeldung per E-Mail-Code; [Dokumentation](#philips-air-plus)                                  |
+| **Bambu Lab H2**     | `bambu-lab-h2`     | Geräte           | Liest lokale MQTT-Druckerdaten mit IP, Access Code und Seriennummer pro Node, ohne Kamera; [Dokumentation](bambu-lab-h2/README.md)                                              |
+| **Lyngdorf MP-60**   | `lyngdorf`         | Geräte           | Hauptzone über TCP: Power, Lautstärke in Prozent, Quellen, RoomPerfect, Voicing und Audiomodus; [Dokumentation](lyngdorf/README.md)                                             |
+| **Leica Cine 1**     | `leica-cine1`      | Geräte           | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT; eingebautes Client-Zertifikat, automatische PIN-Übermittlung und gespeicherte Kopplung; [Dokumentation](leica-cine1/README.md) |
 
 ### Leica Cine 1 – Einrichtung
 
@@ -367,32 +388,32 @@ Homeserver; der Remote-Gateway benötigt keine Anpassung.
 
 ### BWM – Konfiguration
 
-| Parameter | Typ | Default | Beschreibung |
-|-----------|-----|---------|--------------|
-| `nachlaufzeitDefault` | number | 1 | Nachlaufzeit in Minuten |
-| `freigabeDefault` | number | 1 | Freigabe beim Start (1 = aktiv, 0 = gesperrt) |
-| `grundDefault` | number | 0 | Grundbeleuchtung nach Ablauf (1 = ja, 0 = nein) |
+| Parameter             | Typ    | Default | Beschreibung                                    |
+| --------------------- | ------ | ------- | ----------------------------------------------- |
+| `nachlaufzeitDefault` | number | 1       | Nachlaufzeit in Minuten                         |
+| `freigabeDefault`     | number | 1       | Freigabe beim Start (1 = aktiv, 0 = gesperrt)   |
+| `grundDefault`        | number | 0       | Grundbeleuchtung nach Ablauf (1 = ja, 0 = nein) |
 
 **Eingänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `trigger` | Bewegungsmelder-Impuls (1 = Bewegung erkannt) |
-| `helligkeit` | Aktueller Helligkeitswert |
-| `schwelle` | Optionale Helligkeitsschwelle; Prüfung erst nach dem ersten gültigen Telegramm (auch 0) |
-| `nachlaufzeit` | Nachlaufzeit in Minuten (überschreibt Konfiguration) |
-| `freigabe` | Freigabe (1 = aktiv, 0 = gesperrt) |
-| `grundbeleuchtung` | Grundbeleuchtung nach Ablauf aktivieren (1 = ja) |
+| Handle             | Beschreibung                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `trigger`          | Bewegungsmelder-Impuls (1 = Bewegung erkannt)                                           |
+| `helligkeit`       | Aktueller Helligkeitswert                                                               |
+| `schwelle`         | Optionale Helligkeitsschwelle; Prüfung erst nach dem ersten gültigen Telegramm (auch 0) |
+| `nachlaufzeit`     | Nachlaufzeit in Minuten (überschreibt Konfiguration)                                    |
+| `freigabe`         | Freigabe (1 = aktiv, 0 = gesperrt)                                                      |
+| `grundbeleuchtung` | Grundbeleuchtung nach Ablauf aktivieren (1 = ja)                                        |
 
 **Ausgänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `an_aus` | Schalt-Telegramm (1 = ein, 0 = aus) |
-| `an` | Impuls beim Einschalten |
-| `aus` | Impuls beim Ausschalten |
-| `grund` | Grundbeleuchtung aktiv (Impuls) |
-| `aktiv` | Nachlauf läuft gerade (1 / 0) |
+| Handle     | Beschreibung                          |
+| ---------- | ------------------------------------- |
+| `an_aus`   | Schalt-Telegramm (1 = ein, 0 = aus)   |
+| `an`       | Impuls beim Einschalten               |
+| `aus`      | Impuls beim Ausschalten               |
+| `grund`    | Grundbeleuchtung aktiv (Impuls)       |
+| `aktiv`    | Nachlauf läuft gerade (1 / 0)         |
 | `restzeit` | Verbleibende Nachlaufzeit in Sekunden |
 
 **Verhalten:** Trigger `1` + Freigabe aktiv → Licht ein, Nachlauftimer startet.
@@ -409,28 +430,28 @@ Helligkeit < Schwelle → `grund`-Ausgang, sonst `aus`.
 
 ### Lauflicht – Konfiguration
 
-| Parameter | Typ | Default | Beschreibung |
-|-----------|-----|---------|------------------|
-| `outputs` | number | 4 | Anzahl Ausgänge (beliebig viele, dynamisch) |
-| `delay` | number | 200 | Verzögerung zwischen Ausgängen in ms |
-| `direction` | select | `forward` | Richtung beim Einschalten: `forward` (1→N) oder `backward` (N→1) |
-| `reverseOnOff` | select | `0` | Beim Ausschalten Richtung umkehren: `0` = nein, `1` = ja |
+| Parameter      | Typ    | Default   | Beschreibung                                                     |
+| -------------- | ------ | --------- | ---------------------------------------------------------------- |
+| `outputs`      | number | 4         | Anzahl Ausgänge (beliebig viele, dynamisch)                      |
+| `delay`        | number | 200       | Verzögerung zwischen Ausgängen in ms                             |
+| `direction`    | select | `forward` | Richtung beim Einschalten: `forward` (1→N) oder `backward` (N→1) |
+| `reverseOnOff` | select | `0`       | Beim Ausschalten Richtung umkehren: `0` = nein, `1` = ja         |
 
 Die Ausgänge passen sich in der Node live an wenn die Anzahl geändert wird (`dynamicOutputs`).
 
 ### Heizstab – Konfiguration
 
-| Parameter | Typ | Default | Beschreibung |
-|-----------|-----|---------|---------------------|
-| `minTemp` | number | 0 | Unterhalb dieser Temperatur wird sofort geheizt |
-| `maxTemp` | number | 60 | Oberhalb von `maxTemp + 0,2 °C` wird abgeschaltet |
-| `phasen` | select | `3` | Anzahl nutzbarer Phasen (1–3) |
-| `phasePower` | number | 2000 | Leistung pro Phase in Watt |
-| `warten` | select | `0` | Bei fehlendem Überschuss: `0` = alternativ heizen, `1` = warten |
-| `batterieLimit` | number | 20 | Ab diesem Batterieladezustand (%) wird Boost aktiviert wenn kein PV-Überschuss |
-| `ueberschuss` | number | 0 | Überschussregel: Temp-Abweichung von maxTemp ab der PV-Heizung einsetzt (0 = aus) |
-| `beobachtung` | number | 30 | Watchdog-Zeit in Sekunden: nach Ablauf wird abgeschaltet wenn Überschuss < 1 W |
-| `aktiv` | select | `1` | Steuerung aktiv (`1`) oder inaktiv (`0`) |
+| Parameter       | Typ    | Default | Beschreibung                                                                      |
+| --------------- | ------ | ------- | --------------------------------------------------------------------------------- |
+| `minTemp`       | number | 0       | Unterhalb dieser Temperatur wird sofort geheizt                                   |
+| `maxTemp`       | number | 60      | Oberhalb von `maxTemp + 0,2 °C` wird abgeschaltet                                 |
+| `phasen`        | select | `3`     | Anzahl nutzbarer Phasen (1–3)                                                     |
+| `phasePower`    | number | 2000    | Leistung pro Phase in Watt                                                        |
+| `warten`        | select | `0`     | Bei fehlendem Überschuss: `0` = alternativ heizen, `1` = warten                   |
+| `batterieLimit` | number | 20      | Ab diesem Batterieladezustand (%) wird Boost aktiviert wenn kein PV-Überschuss    |
+| `ueberschuss`   | number | 0       | Überschussregel: Temp-Abweichung von maxTemp ab der PV-Heizung einsetzt (0 = aus) |
+| `beobachtung`   | number | 30      | Watchdog-Zeit in Sekunden: nach Ablauf wird abgeschaltet wenn Überschuss < 1 W    |
+| `aktiv`         | select | `1`     | Steuerung aktiv (`1`) oder inaktiv (`0`)                                          |
 
 **Eingänge:** 15 KNX-Eingänge (alle optional, überschreiben die Node-Konfiguration).  
 **Ausgänge:** `L1`, `L2`, `L3` (Phasen), `Alternativ heizen`, `Leistung (%)`, `Debug`.
@@ -451,12 +472,12 @@ Ventil Ist (%), Hysterese (K), Zyklus (s), Pumpenstatus (0/1 bzw. Boolean).
 
 **Ausgang:** Ventil Soll (%), ganze Prozentwerte von 0 bis 100.
 
-| Einstellung | Standard | Bedeutung |
-|-------------|----------|-----------|
-| Betriebsart | Heizen | Heizen oder Kühlen; bestimmt die Wirkung der Ventilöffnung |
-| Temperatur Soll | Kein Vorgabewert | Solltemperatur in °C |
-| Hysterese | 1 K | Regelbeginn außerhalb Soll ± Hysterese; Halten ab Soll ± halber Hysterese |
-| Zyklus | 30 s | Berechnungsintervall, zulässig 1–86400 Sekunden |
+| Einstellung     | Standard         | Bedeutung                                                                 |
+| --------------- | ---------------- | ------------------------------------------------------------------------- |
+| Betriebsart     | Heizen           | Heizen oder Kühlen; bestimmt die Wirkung der Ventilöffnung                |
+| Temperatur Soll | Kein Vorgabewert | Solltemperatur in °C                                                      |
+| Hysterese       | 1 K              | Regelbeginn außerhalb Soll ± Hysterese; Halten ab Soll ± halber Hysterese |
+| Zyklus          | 30 s             | Berechnungsintervall, zulässig 1–86400 Sekunden                           |
 
 Eingänge überschreiben die entsprechenden Node-Einstellungen. Temperatur Ist
 und Ventil Ist benötigen gültige Messwerte; die Hysterese muss positiv sein.
@@ -499,78 +520,78 @@ Fehlgeschlagene Befehle werden nicht automatisch wiederholt.
 Ein/Aus verwendet den passenden Relay-, Light- oder RGBW-Endpunkt;
 Gen-1-Dimmer SHDM-1/SHDM-2 werden auch bei voreingestelltem Gerätetyp Relay erkannt.
 
-| Parameter | Typ | Default | Beschreibung |
-|-----------|-----|---------|--------------|
-| `ip` | text | – | IP-Adresse des Shelly |
-| `port` | number | `80` | HTTP-Port |
-| `channel` | number | `0` | Kanal (0-basiert, z.B. 0 oder 1 beim Shelly 2.5) |
-| `type` | select | `relay` | Gerätetyp: `relay`, `light`, `color`, `white`, `roller`, `sensor` |
-| `rgbwRange` | select | `percent` | Wertebereich für RGBW-Ein-/Ausgänge: `0–100 %` oder `0–255` |
-| `interval` | number | `0` | Status-Abfrage-Intervall in Sekunden (0 = deaktiviert) |
-| `dimmOn` | select | `0` | Bei Dim > 0 automatisch einschalten |
-| `dimmOff` | select | `0` | Bei Dim = 0 automatisch ausschalten |
-| `autoFwUpdate` | select | `0` | Firmware automatisch aktualisieren wenn ein Update verfügbar ist |
-| `username` | text | – | Benutzername (nur wenn Auth aktiviert) |
-| `password` | password | – | Passwort – Gen 1: Basic Auth · Gen 2+: Digest Auth (SHA-256) |
+| Parameter      | Typ      | Default   | Beschreibung                                                      |
+| -------------- | -------- | --------- | ----------------------------------------------------------------- |
+| `ip`           | text     | –         | IP-Adresse des Shelly                                             |
+| `port`         | number   | `80`      | HTTP-Port                                                         |
+| `channel`      | number   | `0`       | Kanal (0-basiert, z.B. 0 oder 1 beim Shelly 2.5)                  |
+| `type`         | select   | `relay`   | Gerätetyp: `relay`, `light`, `color`, `white`, `roller`, `sensor` |
+| `rgbwRange`    | select   | `percent` | Wertebereich für RGBW-Ein-/Ausgänge: `0–100 %` oder `0–255`       |
+| `interval`     | number   | `0`       | Status-Abfrage-Intervall in Sekunden (0 = deaktiviert)            |
+| `dimmOn`       | select   | `0`       | Bei Dim > 0 automatisch einschalten                               |
+| `dimmOff`      | select   | `0`       | Bei Dim = 0 automatisch ausschalten                               |
+| `autoFwUpdate` | select   | `0`       | Firmware automatisch aktualisieren wenn ein Update verfügbar ist  |
+| `username`     | text     | –         | Benutzername (nur wenn Auth aktiviert)                            |
+| `password`     | password | –         | Passwort – Gen 1: Basic Auth · Gen 2+: Digest Auth (SHA-256)      |
 
 **Eingänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `onOff` | Ein/Aus (1 = ein, 0 = aus) |
-| `brightness` | Helligkeit 0–100 % (Dimmer/Light) |
-| `triggerStatus` | Trigger: Status sofort abfragen |
-| `fwUpdate` | Trigger: Firmware-Update starten |
-| `reboot` | Trigger: Gerät neu starten |
-| `openClose` | Jalousie: 1 = Auf, 0 = Zu |
-| `stop` | Jalousie: Stop-Trigger |
-| `position` | Jalousie: Zielposition 0–100 % |
-| `red` | Rot (Bereich je nach `rgbwRange`) |
-| `green` | Grün (Bereich je nach `rgbwRange`) |
-| `blue` | Blau (Bereich je nach `rgbwRange`) |
-| `white` | Weiß (Bereich je nach `rgbwRange`) |
-| `gain` | Gain 0–100 % |
+| Handle          | Beschreibung                       |
+| --------------- | ---------------------------------- |
+| `onOff`         | Ein/Aus (1 = ein, 0 = aus)         |
+| `brightness`    | Helligkeit 0–100 % (Dimmer/Light)  |
+| `triggerStatus` | Trigger: Status sofort abfragen    |
+| `fwUpdate`      | Trigger: Firmware-Update starten   |
+| `reboot`        | Trigger: Gerät neu starten         |
+| `openClose`     | Jalousie: 1 = Auf, 0 = Zu          |
+| `stop`          | Jalousie: Stop-Trigger             |
+| `position`      | Jalousie: Zielposition 0–100 %     |
+| `red`           | Rot (Bereich je nach `rgbwRange`)  |
+| `green`         | Grün (Bereich je nach `rgbwRange`) |
+| `blue`          | Blau (Bereich je nach `rgbwRange`) |
+| `white`         | Weiß (Bereich je nach `rgbwRange`) |
+| `gain`          | Gain 0–100 %                       |
 
 **Ausgänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `connected` | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
-| `onOff` | Status Ein/Aus (1/0) |
-| `brightness` | Helligkeit 0–100 % |
-| `power` | Aktuelle Leistung in W |
-| `energy` | Gesamtenergie in kWh |
-| `overpower` | Überlast (1 = Überlast, 0 = OK) |
-| `temp` | Gerätetemperatur in °C |
-| `overtemp` | Übertemperatur-Alarm (1/0) |
-| `fwAvailable` | Firmware-Update verfügbar (1/0) |
-| `red` | Rot (Bereich je nach `rgbwRange`) |
-| `green` | Grün (Bereich je nach `rgbwRange`) |
-| `blue` | Blau (Bereich je nach `rgbwRange`) |
-| `white` | Weiß (Bereich je nach `rgbwRange`) |
-| `gain` | Gain 0–100 % |
-| `extTemp1` | Externer Temperaturfühler 1 (°C, Shelly AddOn) |
-| `extTemp2` | Externer Temperaturfühler 2 (°C, Shelly AddOn) |
-| `extTemp3` | Externer Temperaturfühler 3 (°C, Shelly AddOn) |
-| `positionOut` | Aktuelle Jalousieposition 0–100 % |
-| `inputState` | Eingang-Status (0/1) |
-| `inputEvent` | Eingang-Event (z.B. `S`, `L`) |
-| `humidity` | Relative Luftfeuchte in % |
-| `battery` | Batterieladezustand in % |
-| `flood` | Leckage erkannt (1/0) |
-| `motion` | Bewegung erkannt (1/0) |
-| `tamper` | Tamper / Alarm (1/0) |
+| Handle        | Beschreibung                                    |
+| ------------- | ----------------------------------------------- |
+| `connected`   | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
+| `onOff`       | Status Ein/Aus (1/0)                            |
+| `brightness`  | Helligkeit 0–100 %                              |
+| `power`       | Aktuelle Leistung in W                          |
+| `energy`      | Gesamtenergie in kWh                            |
+| `overpower`   | Überlast (1 = Überlast, 0 = OK)                 |
+| `temp`        | Gerätetemperatur in °C                          |
+| `overtemp`    | Übertemperatur-Alarm (1/0)                      |
+| `fwAvailable` | Firmware-Update verfügbar (1/0)                 |
+| `red`         | Rot (Bereich je nach `rgbwRange`)               |
+| `green`       | Grün (Bereich je nach `rgbwRange`)              |
+| `blue`        | Blau (Bereich je nach `rgbwRange`)              |
+| `white`       | Weiß (Bereich je nach `rgbwRange`)              |
+| `gain`        | Gain 0–100 %                                    |
+| `extTemp1`    | Externer Temperaturfühler 1 (°C, Shelly AddOn)  |
+| `extTemp2`    | Externer Temperaturfühler 2 (°C, Shelly AddOn)  |
+| `extTemp3`    | Externer Temperaturfühler 3 (°C, Shelly AddOn)  |
+| `positionOut` | Aktuelle Jalousieposition 0–100 %               |
+| `inputState`  | Eingang-Status (0/1)                            |
+| `inputEvent`  | Eingang-Event (z.B. `S`, `L`)                   |
+| `humidity`    | Relative Luftfeuchte in %                       |
+| `battery`     | Batterieladezustand in %                        |
+| `flood`       | Leckage erkannt (1/0)                           |
+| `motion`      | Bewegung erkannt (1/0)                          |
+| `tamper`      | Tamper / Alarm (1/0)                            |
 
 **API-Unterschiede je Generation:**
 
-| | Gen 1 | Gen 2 / 3 / 4 |
-|---|---|---|
-| Steuern | `GET /relay/0?turn=on` | `POST /rpc` → `Switch.Set` |
-| Dimmen | `GET /light/0?brightness=80` | `POST /rpc` → `Light.Set` |
-| RGBW | `GET /color/0?red=…` | `POST /rpc` → `RGBW.Set` |
-| Jalousie | `GET /roller/0?go=open` | `POST /rpc` → `Cover.Open/Close/GoToPosition` |
-| Status | `GET /status` | `POST /rpc` → `Shelly.GetStatus` |
-| Auth | HTTP Basic Auth | Digest Auth (SHA-256, im JSON-Body) |
+|          | Gen 1                        | Gen 2 / 3 / 4                                 |
+| -------- | ---------------------------- | --------------------------------------------- |
+| Steuern  | `GET /relay/0?turn=on`       | `POST /rpc` → `Switch.Set`                    |
+| Dimmen   | `GET /light/0?brightness=80` | `POST /rpc` → `Light.Set`                     |
+| RGBW     | `GET /color/0?red=…`         | `POST /rpc` → `RGBW.Set`                      |
+| Jalousie | `GET /roller/0?go=open`      | `POST /rpc` → `Cover.Open/Close/GoToPosition` |
+| Status   | `GET /status`                | `POST /rpc` → `Shelly.GetStatus`              |
+| Auth     | HTTP Basic Auth              | Digest Auth (SHA-256, im JSON-Body)           |
 
 ---
 
@@ -583,27 +604,27 @@ Der Status-Punkt im Node-Titel zeigt grün (verbunden) / rot (getrennt) basieren
 
 **Globale Einstellungen** (gelten für alle Hue-Nodes):
 
-| Parameter | Beschreibung |
-|-----------|--------------|
-| `ip` | IP-Adresse der Hue Bridge |
-| `port` | HTTP-Port (Standard: 80) |
-| `apiKey` | API Key / Bridge Username (aus der Bridge-Einrichtung) |
+| Parameter | Beschreibung                                           |
+| --------- | ------------------------------------------------------ |
+| `ip`      | IP-Adresse der Hue Bridge                              |
+| `port`    | HTTP-Port (Standard: 80)                               |
+| `apiKey`  | API Key / Bridge Username (aus der Bridge-Einrichtung) |
 
 **Node-Konfiguration:**
 
-| Parameter | Typ | Default | Beschreibung |
-|-----------|-----|---------|--------------|
-| `ip` | text | – | Überschreibt globale IP (optional) |
-| `port` | number | – | Überschreibt globalen Port (optional) |
-| `apiKey` | text | – | Überschreibt globalen API Key (optional) |
-| `lightId` | number | `0` | Lampen-ID (0 = deaktiviert) |
-| `groupId` | number | `0` | Gruppen-ID (0 = deaktiviert, hat Vorrang wenn lightId = 0) |
-| `gamut` | select | `B` | Farbgamut: `A` (LivingColors, Bloom), `B` (Hue A19, Standard), `C` (Hue Go, LightStrips+) |
-| `intelliStart` | select | `0` | Intelli Start: Szene beim Einschalten setzen (1 = ja) |
-| `scene` | text | – | Szenen-ID die beim Einschalten gesetzt wird (nur bei Intelli Start) |
-| `startBri` | number | `0` | Starthelligkeit in % beim Einschalten (0 = deaktiviert) |
-| `interval` | number | `0` | Pause nach abgeschlossener Statusabfrage in Sekunden (0 = deaktiviert, sofern schnelles Polling aus ist) |
-| `longPoll` | select | `0` | Schnelles Status-Polling: mindestens 5 Sekunden Pause; ein größeres Status-Intervall hat Vorrang |
+| Parameter      | Typ    | Default | Beschreibung                                                                                             |
+| -------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------- |
+| `ip`           | text   | –       | Überschreibt globale IP (optional)                                                                       |
+| `port`         | number | –       | Überschreibt globalen Port (optional)                                                                    |
+| `apiKey`       | text   | –       | Überschreibt globalen API Key (optional)                                                                 |
+| `lightId`      | number | `0`     | Lampen-ID (0 = deaktiviert)                                                                              |
+| `groupId`      | number | `0`     | Gruppen-ID (0 = deaktiviert, hat Vorrang wenn lightId = 0)                                               |
+| `gamut`        | select | `B`     | Farbgamut: `A` (LivingColors, Bloom), `B` (Hue A19, Standard), `C` (Hue Go, LightStrips+)                |
+| `intelliStart` | select | `0`     | Intelli Start: Szene beim Einschalten setzen (1 = ja)                                                    |
+| `scene`        | text   | –       | Szenen-ID die beim Einschalten gesetzt wird (nur bei Intelli Start)                                      |
+| `startBri`     | number | `0`     | Starthelligkeit in % beim Einschalten (0 = deaktiviert)                                                  |
+| `interval`     | number | `0`     | Pause nach abgeschlossener Statusabfrage in Sekunden (0 = deaktiviert, sofern schnelles Polling aus ist) |
+| `longPoll`     | select | `0`     | Schnelles Status-Polling: mindestens 5 Sekunden Pause; ein größeres Status-Intervall hat Vorrang         |
 
 **Statusabfragen ab 1.0.11:** Das bisher „Long-Polling“ genannte Verfahren
 ist regelmäßiges HTTP-Polling, kein Push-Kanal. Beide Polling-Einstellungen
@@ -622,47 +643,46 @@ und meldet die Verbindung wieder als hergestellt.
 
 **Eingänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `onOff` | Ein/Aus (1 = ein, 0 = aus) |
-| `brightness` | Helligkeit 0–100 % |
-| `saturation` | Sättigung 0–100 % |
-| `colorTemp` | Farbtemperatur 0 (kalt/6500 K) bis 100 (warm/2000 K) |
-| `red` | Rot 0–100 |
-| `green` | Grün 0–100 |
-| `blue` | Blau 0–100 |
-| `hsv` | Farbe als gepackter Dezimalwert (RRGGBB hex → integer, z.B. `0xFF8800`) |
-| `scene` | Szene aktivieren (ID-String) |
-| `dim` | KNX 4-Bit Relativdimmer (DPT 3.007) |
-| `triggerStatus` | Trigger: Status sofort abfragen |
+| Handle          | Beschreibung                                                            |
+| --------------- | ----------------------------------------------------------------------- |
+| `onOff`         | Ein/Aus (1 = ein, 0 = aus)                                              |
+| `brightness`    | Helligkeit 0–100 %                                                      |
+| `saturation`    | Sättigung 0–100 %                                                       |
+| `colorTemp`     | Farbtemperatur 0 (kalt/6500 K) bis 100 (warm/2000 K)                    |
+| `red`           | Rot 0–100                                                               |
+| `green`         | Grün 0–100                                                              |
+| `blue`          | Blau 0–100                                                              |
+| `hsv`           | Farbe als gepackter Dezimalwert (RRGGBB hex → integer, z.B. `0xFF8800`) |
+| `scene`         | Szene aktivieren (ID-String)                                            |
+| `dim`           | KNX 4-Bit Relativdimmer (DPT 3.007)                                     |
+| `triggerStatus` | Trigger: Status sofort abfragen                                         |
 
 **Ausgänge:**
 
-| Handle | Beschreibung |
-|--------|--------------|
-| `connected` | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
-| `onOff` | Status Ein/Aus (1/0) |
-| `brightness` | Helligkeit 0–100 % |
-| `saturation` | Sättigung 0–100 % |
-| `colorTemp` | Farbtemperatur 0–100 |
-| `red` | Rot 0–100 |
-| `green` | Grün 0–100 |
-| `blue` | Blau 0–100 |
-| `hsv` | Farbe als gepackter Dezimalwert (RRGGBB) |
+| Handle       | Beschreibung                                    |
+| ------------ | ----------------------------------------------- |
+| `connected`  | Verbindungsstatus (1 = verbunden, 0 = getrennt) |
+| `onOff`      | Status Ein/Aus (1/0)                            |
+| `brightness` | Helligkeit 0–100 %                              |
+| `saturation` | Sättigung 0–100 %                               |
+| `colorTemp`  | Farbtemperatur 0–100                            |
+| `red`        | Rot 0–100                                       |
+| `green`      | Grün 0–100                                      |
+| `blue`       | Blau 0–100                                      |
+| `hsv`        | Farbe als gepackter Dezimalwert (RRGGBB)        |
 
 **Farbmodi im Vergleich:**
 
-| Modus | Eingang | Hue-API intern |
-|-------|---------|----------------|
-| Farbtemperatur | `colorTemp` 0–100 % | `ct` 153–500 Mired |
-| RGB | `red` / `green` / `blue` 0–100 | xy (CIE 1931, Gamut-korrigiert) |
-| HSV / Hex | `hsv` (Dezimalwert) | `hue` 0–65535 + `sat` + `bri` |
-| Szene | `scene` (ID-String) | `scene` direkt |
+| Modus          | Eingang                        | Hue-API intern                  |
+| -------------- | ------------------------------ | ------------------------------- |
+| Farbtemperatur | `colorTemp` 0–100 %            | `ct` 153–500 Mired              |
+| RGB            | `red` / `green` / `blue` 0–100 | xy (CIE 1931, Gamut-korrigiert) |
+| HSV / Hex      | `hsv` (Dezimalwert)            | `hue` 0–65535 + `sat` + `bri`   |
+| Szene          | `scene` (ID-String)            | `scene` direkt                  |
 
 **KNX 4-Bit Dimmer (DPT 3.007):**  
 Bit 3 = Richtung (1 = heller, 0 = dunkler), Bits 0–2 = Schrittweite 1–7.  
 Byte `0x00` = Stopp-Telegramm (wird ignoriert).
-
 
 ### Somfy Tahoma – lokale Steuerung
 
@@ -676,20 +696,20 @@ Gerätenamen oder die vollständige Geräte-ID (`deviceURL`, beispielsweise
 `io://1234-5678-9012/123456#1`) konfigurieren oder über Eingang 3/4 zuführen.
 Die Geräte-ID hat Vorrang; Namen müssen innerhalb der Box eindeutig sein.
 
-| Eingang | Funktion |
-|---|---|
-| 1 / 2 | IP-Adresse / Token; leer = globale Einstellung |
-| 3 / 4 | Gerätename / vollständige Geräte-ID |
-| 5 | Schalten: 0 = aus, 1 = ein |
-| 6 | Toggle: jedes 0- oder 1-Telegramm schaltet um |
-| 7 | Dimmwert 0–100 % |
-| 8 / 9 | Öffnen / Schliessen, jeweils bei jedem 0- oder 1-Telegramm |
-| 10 | Auf/Ab: 0 = auf, 1 = ab |
-| 11 | Stop, bei jedem 0- oder 1-Telegramm |
-| 12 | Position: 0 % = offen, 100 % = geschlossen |
-| 13 | Lamellenwinkel 0–100 % gemäß TaHoma-Geräteskala |
-| 14 | Status Trigger: Abfrage bei jedem 0- oder 1-Telegramm |
-| 15 | Statusintervall in Sekunden; Standard 10, 0 deaktiviert Polling; Minimum 1 |
+| Eingang | Funktion                                                                   |
+| ------- | -------------------------------------------------------------------------- |
+| 1 / 2   | IP-Adresse / Token; leer = globale Einstellung                             |
+| 3 / 4   | Gerätename / vollständige Geräte-ID                                        |
+| 5       | Schalten: 0 = aus, 1 = ein                                                 |
+| 6       | Toggle: jedes 0- oder 1-Telegramm schaltet um                              |
+| 7       | Dimmwert 0–100 %                                                           |
+| 8 / 9   | Öffnen / Schliessen, jeweils bei jedem 0- oder 1-Telegramm                 |
+| 10      | Auf/Ab: 0 = auf, 1 = ab                                                    |
+| 11      | Stop, bei jedem 0- oder 1-Telegramm                                        |
+| 12      | Position: 0 % = offen, 100 % = geschlossen                                 |
+| 13      | Lamellenwinkel 0–100 % gemäß TaHoma-Geräteskala                            |
+| 14      | Status Trigger: Abfrage bei jedem 0- oder 1-Telegramm                      |
+| 15      | Statusintervall in Sekunden; Standard 10, 0 deaktiviert Polling; Minimum 1 |
 
 Die fünf Ausgänge liefern **Status**, **Helligkeit**, **Position**,
 **Lamellenwinkel** und **Fährt**. Nur vorhandene, gültige Gerätestatuswerte werden
@@ -727,18 +747,18 @@ Die Liste wird vom Hub gelesen und kann aktualisiert werden; die Auswahl überni
 die Geräte-ID. Manuelle IDs bleiben möglich. Unter den Plugin-Einstellungen kann
 die Geräteliste ebenfalls geladen werden. Die Abfrage löst keine Fahrbefehle aus.
 
-| Eingang | Funktion |
-|---|---|
-| 1 / 2 | IP-Adresse / Port (Standard 80) |
-| 3 / 4 | Gerätename / Geräte-ID |
-| 5 | Auf/Ab: 0 = auf, 1 = ab |
-| 6 / 7 | Öffnen / Schliessen: nur Telegramme mit Wert 1 |
-| 8 | Stop: jedes 0- oder 1-Telegramm, auch wiederholte Werte |
-| 9 | Position: 0 % = offen, 100 % = geschlossen |
-| 10 | Lamellenwinkel 0–100 % des unterstützten Verstellbereichs |
-| 11 | Szene aktivieren: ID oder eindeutiger Name, ID hat Vorrang |
-| 12 | Status Trigger: bei 1 Gerät über `refresh=true` abfragen |
-| 13 | Statusintervall in Sekunden: Standard 10, 0 = Polling aus, Minimum 1 |
+| Eingang | Funktion                                                             |
+| ------- | -------------------------------------------------------------------- |
+| 1 / 2   | IP-Adresse / Port (Standard 80)                                      |
+| 3 / 4   | Gerätename / Geräte-ID                                               |
+| 5       | Auf/Ab: 0 = auf, 1 = ab                                              |
+| 6 / 7   | Öffnen / Schliessen: nur Telegramme mit Wert 1                       |
+| 8       | Stop: jedes 0- oder 1-Telegramm, auch wiederholte Werte              |
+| 9       | Position: 0 % = offen, 100 % = geschlossen                           |
+| 10      | Lamellenwinkel 0–100 % des unterstützten Verstellbereichs            |
+| 11      | Szene aktivieren: ID oder eindeutiger Name, ID hat Vorrang           |
+| 12      | Status Trigger: bei 1 Gerät über `refresh=true` abfragen             |
+| 13      | Statusintervall in Sekunden: Standard 10, 0 = Polling aus, Minimum 1 |
 
 Die Ausgänge sind in dieser Reihenfolge **Verbindungsstatus**, **Position**,
 **Lamellenwinkel**, **Batterie**, **Batteriewarnung**, **Fährt**, **Signalstärke (dBm)**. Unveränderte Werte
@@ -1013,7 +1033,6 @@ PowerView ab 1.0.5: Gen 2/3 senden vor direkten Fahr- und Lamellenbefehlen
 automatisch Stop. Stop und Folgebefehl werden pro Node sequenziell gesendet;
 ein fehlgeschlagener Stop verhindert den Folgebefehl.
 
-
 ### Globale Plugin-Aktionen
 
 Zusätzlich zu `globalSettings` können Plugins `globalActions` deklarieren. Die
@@ -1026,7 +1045,6 @@ in `fields` und werden nicht gespeichert. Bei Plugins mit globalen Aktionen werd
 nur deklarierte `globalSettings` an den Browser ausgeliefert bzw. von dort geändert;
 interne Sitzungswerte bleiben im Backend. Voraussetzung ist ein gemeinsam
 aktualisiertes kaenix-Backend/Frontend mit Unterstützung dieser Schnittstelle.
-
 
 ## Zentral
 
@@ -1081,14 +1099,14 @@ mehrere Geräte erkannt werden. Bestehende UUIDs und das Konfigurationsfeld
 `deviceUuid` bleiben gültig; neue Geräte können IDs ohne Bindestriche verwenden.
 Die Geräteliste liefert `uuid`, `name`, `backend` und beim Air+-Verzeichnis `model`.
 
-| Eingang | AC0651/10 | AC2220/10 |
-|---|---|---|
-| `power` | 0/1, aus/ein | 0/1, aus/ein |
-| `mode` | 0 Auto, 1 Mittel, 17 Schlaf, 18 Turbo | 0 Auto, 1–5 manuelle Stufen, 17 Schlaf, 18 Turbo, 19 Mittel |
-| Modus als Text | `auto`, `medium`, `sleep`, `turbo` | Zusätzlich `speed1` bis `speed5`; `medium` wird auf 19 umgesetzt |
-| `standbyMonitor` | 0/1 | Nicht freigegeben |
-| `resetFilterClean`, `resetFilterReplace` | Nach Reinigung/Filtertausch, 720/4800 h | Nicht freigegeben; keine bestätigten Cloud-Reset-Befehle |
-| `triggerStatus`, `reconnect` | Status abrufen / Geräte neu laden | Status abrufen / Geräte neu laden |
+| Eingang                                  | AC0651/10                               | AC2220/10                                                        |
+| ---------------------------------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| `power`                                  | 0/1, aus/ein                            | 0/1, aus/ein                                                     |
+| `mode`                                   | 0 Auto, 1 Mittel, 17 Schlaf, 18 Turbo   | 0 Auto, 1–5 manuelle Stufen, 17 Schlaf, 18 Turbo, 19 Mittel      |
+| Modus als Text                           | `auto`, `medium`, `sleep`, `turbo`      | Zusätzlich `speed1` bis `speed5`; `medium` wird auf 19 umgesetzt |
+| `standbyMonitor`                         | 0/1                                     | Nicht freigegeben                                                |
+| `resetFilterClean`, `resetFilterReplace` | Nach Reinigung/Filtertausch, 720/4800 h | Nicht freigegeben; keine bestätigten Cloud-Reset-Befehle         |
+| `triggerStatus`, `reconnect`             | Status abrufen / Geräte neu laden       | Status abrufen / Geräte neu laden                                |
 
 Die Ausgänge liefern Modell, Ein/Aus, Modus, Lüfterstufe, PM2.5, Allergenindex
 und Filter-Restwerte, soweit das Gerät sie meldet. Filterprozente verwenden
