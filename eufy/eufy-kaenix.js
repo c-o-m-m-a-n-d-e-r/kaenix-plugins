@@ -1,9 +1,8 @@
 /**
  * @plugin Eufy Kameras
- * @version 1.0.1
+ * @version 1.0.2
  * @author kaenix
  */
-const { spawn } = require("node:child_process");
 const { PassThrough } = require("node:stream");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -151,13 +150,17 @@ function waitFor(client, events, action, { signal, timeout = 25000 } = {}) {
 class EufyProvider {
     constructor(
         context,
-        { sdk, spawnProcess = spawn, nodeVersion = process.versions.node } = {},
+        {
+            sdk,
+            nodeVersion = process.versions.node,
+            streamTimeoutMs = 18000,
+        } = {},
     ) {
         this.context = context;
         this.sdk = sdk;
         this.nodeVersion = nodeVersion;
         this.sdkVersion = CLIENT_VERSION;
-        this.spawnProcess = spawnProcess;
+        this.streamTimeoutMs = streamTimeoutMs;
         this.status = "eufy_disconnected";
         this.sessions = new Map();
         this.disposed = false;
@@ -356,60 +359,80 @@ class EufyProvider {
     }
 
     async openStream(id, signal) {
-        signal = AbortSignal.any([signal, this.controller.signal]);
+        const sessionController = new AbortController();
+        signal = AbortSignal.any([
+            signal,
+            this.controller.signal,
+            sessionController.signal,
+        ]);
         const client = await this.connectedClient();
         if (signal.aborted || this.disposed)
             throw new Error("eufy_stream_unavailable");
         if (this.sessions.has(id)) throw new Error("eufy_busy");
         const output = new PassThrough({ highWaterMark: 256 * 1024 });
-        // Keep errors handled even if the HTTP caller disappears before the first bytes.
         output.on("error", () => {});
         const session = { output };
         this.sessions.set(id, session);
-        let child,
-            video,
-            audio,
-            watchdog,
+        let video, audio, station, channel, watchdog, failure, codec;
+        let bytes = 0,
             lastData = Date.now(),
-            stopped = false;
+            stopped = false,
+            stage = "p2p-start";
+        const report = (key, warn = false) => {
+            this.streamStatus = key;
+            this.diagnosticCode = `phase=stream; sdk=${this.sdkVersion}; stage=${stage}; codec=${codec || "unknown"}; bytes=${bytes}`;
+            if (warn) this.context.warn?.(`${key}; ${this.diagnosticCode}`);
+        };
         const stop = () => {
             if (stopped) return;
             stopped = true;
             clearInterval(watchdog);
             signal.removeEventListener("abort", stop);
             client.removeListener("station livestream stop", onStopped);
+            station?.removeListener("livestream error", onMediaError);
             this.sessions.delete(id);
-            video?.unpipe();
+            video?.unpipe(output);
             video?.destroy();
             audio?.destroy();
-            child?.stdin.destroy();
-            child?.stdout.destroy();
-            if (child && child.exitCode === null) {
-                child.kill("SIGTERM");
-                const timer = setTimeout(() => {
-                    if (child.exitCode === null) child.kill("SIGKILL");
-                }, 2000);
-                timer.unref?.();
-            }
+            if (!failure)
+                report(bytes ? "eufy_stream_stopped" : "eufy_stream_cancelled");
+            sessionController.abort();
             output.destroy();
             void client.stopStationLivestream(id).catch(() => {});
         };
+        const fail = (key) => {
+            if (stopped) return;
+            failure = key;
+            report(key, true);
+            stop();
+        };
         const onStopped = (_station, device) => {
-            if (device.getSerial() === id) stop();
+            if (device.getSerial() === id) fail("eufy_stream_p2p_stopped");
+        };
+        const onMediaError = (_station, streamChannel) => {
+            if (streamChannel === channel) fail("eufy_stream_p2p_error");
         };
         session.stop = stop;
         signal.addEventListener("abort", stop, { once: true });
         output.once("close", stop);
         client.on("station livestream stop", onStopped);
+        report("eufy_stream_starting");
         try {
+            // The SDK does not forward decryption/media errors to the client emitter.
+            const device = await client.getDevice(id);
+            if (signal.aborted) throw new Error("eufy_stream_unavailable");
+            channel = device.getChannel();
+            station = await client.getStation(device.getStationSerial());
+            if (signal.aborted) throw new Error("eufy_stream_unavailable");
+            station.on("livestream error", onMediaError);
             const { args } = await waitFor(
                 client,
                 {
-                    "station livestream start": (_station, device) =>
-                        device.getSerial() === id,
+                    "station livestream start": (_station, streamDevice) =>
+                        streamDevice.getSerial() === id,
                 },
                 () => client.startStationLivestream(id),
-                { signal },
+                { signal, timeout: this.streamTimeoutMs },
             );
             const metadata = args[2];
             video = args[3];
@@ -418,80 +441,39 @@ class EufyProvider {
                 throw new Error("eufy_stream_unavailable");
             if (![0, 1].includes(metadata.videoCodec))
                 throw new Error("eufy_codec_unsupported");
-            // Consume unused audio so the SDK cannot accumulate an unbounded audio queue.
-            audio?.on("error", stop);
+            codec = metadata.videoCodec === 1 ? "H265" : "H264";
+            // go2rtc detects Annex-B H.264/H.265 directly; no remux process is needed.
+            output.contentType =
+                metadata.videoCodec === 1 ? "video/h265" : "video/h264";
+            stage = "video-input";
+            report("eufy_stream_waiting");
+            audio?.on("error", () => fail("eufy_stream_p2p_error"));
             audio?.resume();
-            const fps = Math.min(
-                60,
-                Math.max(1, Number(metadata.videoFPS) || 15),
-            );
-            const codec = metadata.videoCodec === 1 ? "hevc" : "h264";
-            const encoding =
-                codec === "h264"
-                    ? ["-c:v", "copy"]
-                    : [
-                          "-c:v",
-                          "libx264",
-                          "-preset",
-                          "ultrafast",
-                          "-tune",
-                          "zerolatency",
-                          "-pix_fmt",
-                          "yuv420p",
-                      ];
-            child = this.spawnProcess(
-                "ffmpeg",
-                [
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-fflags",
-                    "+genpts",
-                    "-f",
-                    codec,
-                    "-r",
-                    String(fps),
-                    "-i",
-                    "pipe:0",
-                    "-an",
-                    ...encoding,
-                    "-f",
-                    "mpegts",
-                    "-mpegts_flags",
-                    "+resend_headers",
-                    "-muxdelay",
-                    "0",
-                    "pipe:1",
-                ],
-                { stdio: ["pipe", "pipe", "ignore"], shell: false },
-            );
-            child.once("error", stop);
-            child.once("exit", stop);
-            child.stdin.on("error", stop);
-            child.stdout.on("error", stop);
-            video.on("error", stop);
-            video.on("data", () => {
+            video.on("error", () => fail("eufy_stream_p2p_error"));
+            video.pipe(output);
+            video.on("data", (chunk) => {
+                if (stopped) return;
+                bytes += chunk.length;
                 lastData = Date.now();
+                if (stage !== "forwarding") {
+                    stage = "forwarding";
+                    report("eufy_stream_receiving");
+                }
             });
-            video.once("end", () => child.stdin.end());
-            video.pipe(child.stdin);
-            child.stdout.pipe(output);
             watchdog = setInterval(() => {
-                if (
-                    Date.now() - lastData > 10000 ||
-                    video.readableLength > 4 * 1024 * 1024
-                )
-                    stop();
+                if (Date.now() - lastData > 10000) fail("eufy_stream_no_data");
+                else if (video.readableLength > 4 * 1024 * 1024)
+                    fail("eufy_stream_backpressure");
             }, 1000);
             watchdog.unref?.();
             await new Promise((resolve, reject) => {
                 const timer = setTimeout(
-                    () => finish(new Error("eufy_timeout")),
-                    15000,
+                    () => finish(new Error("eufy_stream_no_data")),
+                    5000,
                 );
                 const ready = () => finish();
                 const closed = () =>
-                    finish(new Error("eufy_stream_unavailable"));
+                    finish(new Error(failure || "eufy_stream_unavailable"));
                 const finish = (error) => {
                     clearTimeout(timer);
                     output.removeListener("readable", ready);
@@ -505,14 +487,18 @@ class EufyProvider {
             });
             return output;
         } catch (error) {
-            stop();
-            throw new Error(
-                ["eufy_timeout", "eufy_codec_unsupported"].includes(
-                    error.message,
-                )
-                    ? error.message
-                    : "eufy_stream_unavailable",
-            );
+            if (!stopped)
+                fail(
+                    error.message === "eufy_timeout"
+                        ? "eufy_stream_start_timeout"
+                        : [
+                                "eufy_codec_unsupported",
+                                "eufy_stream_no_data",
+                            ].includes(error.message)
+                          ? error.message
+                          : "eufy_stream_p2p_error",
+                );
+            throw new Error(failure || "eufy_stream_unavailable");
         }
     }
 
@@ -524,6 +510,7 @@ class EufyProvider {
         return {
             hideSave: true,
             status: this.status,
+            streamStatus: this.streamStatus,
             diagnosticCode: this.diagnosticCode,
             visibleActionKeys: connected
                 ? ["logout"]
@@ -559,7 +546,7 @@ module.exports = {
     label: "Eufy",
     category: "Kameras",
     description: "eufy_plugin_description",
-    version: "1.0.1",
+    version: "1.0.2",
     requiresDependencies: true,
     globalSettings: [
         { key: "username", label: "eufy_username", type: "text" },

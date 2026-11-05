@@ -1,6 +1,6 @@
 # Eufy-Kameras für kaenix
 
-Version **1.0.1**. Eigenständiges Kamera-Plugin für die P2P-Anbindung von
+Version **1.0.2**. Eigenständiges Kamera-Plugin für die P2P-Anbindung von
 Eufy-Kameras. Es benötigt kein Logikdatenblatt, keinen zusätzlichen
 `eufy-security-ws`-Container und kein Home Assistant. Die HomeBase-Zuordnung
 bleibt erhalten; das Plugin aktiviert weder NAS/RTSP noch ändert es
@@ -8,7 +8,7 @@ Kamera-Aufnahme- oder Qualitäts-Einstellungen.
 
 ## Einrichtung
 
-1. Homeserver mit Kamera-Provider-Schnittstelle und FFmpeg aktualisieren.
+1. Homeserver mit Kamera-Provider-Schnittstelle aktualisieren.
 2. Plugin einschließlich seiner npm-Abhängigkeiten installieren. Im lokalen
    Checkout im Ordner `plugins/eufy` einmal `npm ci --ignore-scripts` ausführen.
    Im Plugin-Store erledigt die Installation diesen Schritt automatisch.
@@ -31,16 +31,25 @@ verbunden.
 
 ## Medien
 
-Das Plugin empfängt den P2P-Videostream direkt mit `eufy-security-client`, führt
-H.264 ohne Transcoding durch FFmpeg und wandelt H.265 bei Bedarf in H.264 um.
-MPEG-TS wird an das vorhandene go2rtc geliefert. Streamprozesse starten beim
-Öffnen der Quelle und enden, wenn go2rtc sie freigibt. Starts ohne Videodaten,
-Abbrüche und verspätete Stream-Ereignisse werden aufgeräumt.
+Seit 1.0.2 empfängt das Plugin den P2P-Videostream mit
+`eufy-security-client` und gibt die ursprünglichen H.264-/H.265-Bytes direkt
+über den internen HTTP-Eingang an go2rtc weiter. Es startet keinen FFmpeg-Prozess
+und benötigt kein FFmpeg im Homeserver. go2rtc erkennt das Bitstream-Format
+selbst und übernimmt die Aufbereitung für WebRTC oder MSE.
 
-Diese erste Version liefert **Video ohne Ton**. 4K, gleichzeitige Ausgabe beider
-Objektive und eine bestimmte Auflösung sind nicht zugesichert. H.265-Transcoding
-kann auf einer ARMv7-NAS die verfügbare CPU-Leistung übersteigen. Die tatsächliche
-Streamqualität und Stabilität hängen von Modell und Firmware ab.
+Die erste Version liefert **Video ohne Ton**. 4K, gleichzeitige Ausgabe beider
+Objektive und eine bestimmte Auflösung sind nicht zugesichert. H.265 wird nicht
+mehr im Plugin nach H.264 transcodiert; der Browser muss den gelieferten Codec
+unterstützen. Optionales Transcoding gehört in die go2rtc-Konfiguration und
+benötigt gegebenenfalls dort FFmpeg. Die HomeBase-Zuordnung und Kameraeinstellungen
+werden nicht verändert.
+
+Die Plugin-Einstellungen unterscheiden erfolgreiche Cloud-Anmeldung von
+P2P-Streamstatus. Die technischen Details nennen nur Phase, SDK-Version,
+Verarbeitungsstufe, Codec und Bytezahl, keine Geräte-IDs, Bilder oder Schlüssel.
+Ein Timeout bei `stage=p2p-start; bytes=0` bedeutet, dass die SDK trotz
+Geräteerkennung noch kein Livestream-Ereignis geliefert hat. Ein SDK-Medienfehler
+(z. B. beim Entschlüsseln) wird ebenfalls als P2P-Fehler sichtbar.
 
 Die Bibliothek ist auf **3.8.0** festgelegt (Node >=20, damit auch mit dem
 Node-22-ARMv7-Image kompatibel). Sie ist inzwischen abgekündigt. Diese Version
