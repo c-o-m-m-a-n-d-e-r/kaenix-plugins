@@ -1,6 +1,6 @@
 /**
  * @plugin    Somfy Tahoma
- * @version   1.0.2
+ * @version   1.0.3
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Local API: https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode
@@ -367,7 +367,16 @@ module.exports = {
         {
             key: 'deviceId',
             label: 'Geräte-ID (deviceURL, hat Vorrang vor Name)',
-            type: 'somfy-tahoma-device-picker',
+            type: 'async-select',
+            allowCustomValue: true,
+            showValue: true,
+            optionsSource: {
+                action: 'listDevices',
+                parameters: ['ip', 'token', 'gatewayPin'],
+                resultKey: 'devices',
+                valueKey: 'id',
+                labelKey: 'name',
+            },
             placeholder: 'io://1234-5678-9012/123456#1',
         },
         {

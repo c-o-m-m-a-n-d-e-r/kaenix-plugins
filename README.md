@@ -108,9 +108,95 @@ config: [
 ];
 ```
 
-Verfügbare `type`-Werte: `text`, `number`, `password`, `select`, `checkbox`.
+Verfügbare `type`-Werte: `text`, `number`, `password`, `select`, `checkbox`, `async-select`.
 
 Das optionale Feld `default` setzt den Startwert wenn eine neue Node-Instanz angelegt wird.
+
+### Dynamische Auswahllisten (`async-select`)
+
+Plugins können Geräte, Räume, Szenen oder andere Werte im Node-Konfigurationspanel
+als Dropdown bereitstellen. Dafür ist nach Einführung dieses allgemeinen Feldtyps
+kein weiterer Frontend-Code pro Plugin erforderlich. Metadaten werden beim Laden
+bzw. Aktualisieren des Plugins übernommen; ein bereits geöffnetes Panel ggf. neu laden.
+
+```js
+config: [
+    {
+        key: 'deviceId',
+        type: 'async-select',
+        label: { de: 'Gerät', en: 'Device' },
+        showValue: true,       // Name · ID anzeigen
+        allowCustomValue: true, // zusätzliche manuelle Eingabe, Standard false
+        optionsSource: {
+            action: 'listDevices',
+            parameters: ['ip', 'token'],
+        },
+        // Optional: eigene DE/EN-Texte ohne Einträge im Frontend-Sprachkatalog.
+        // Ohne messages verwendet das Frontend allgemeine DE/EN-Texte.
+        messages: {
+            choose: { de: 'Gerät auswählen…', en: 'Choose a device…' },
+            empty: { de: 'Keine Geräte gefunden.', en: 'No devices found.' },
+        },
+    },
+],
+globalActions: [{ key: 'listDevices', label: 'Geräteliste laden' }],
+async handleGlobalAction(action, values, context) {
+    if (action !== 'listDevices') throw new Error('Unbekannte Plugin-Aktion');
+    const ip = values.ip ?? context.globalSetting('ip');
+    const token = values.token ?? context.globalSetting('token');
+    const devices = await loadDevices(ip, token); // API-Aufruf im Plugin implementieren
+    return {
+        options: devices.map(device => ({
+            value: String(device.id),
+            label: device.name,
+        })),
+    };
+},
+```
+
+Die Aktion läuft auf dem Homeserver über die bestehende, authentifizierte
+`POST /api/plugins/:type/actions/:action`-Schnittstelle. Sie muss in `globalActions`
+registriert sein. Beim Öffnen des Feldes und beim Ändern eines deklarierten Parameters
+wird sie automatisch ausgeführt; der Aktualisieren-Button lädt erneut. Diese Aktionen
+müssen rein lesend implementiert sein. Befehle zum Fahren, Schalten oder Anmelden
+gehören nicht in eine automatisch geladene Auswahlliste.
+
+Nur die unter `parameters` genannten Werte werden übertragen. Vorrang haben
+nichtleere Eingangssignale, danach Node-Konfiguration und Feld-Standardwerte.
+Fehlende Werte löst das Plugin über `context.globalSetting` auf; globale Tokens
+müssen dadurch nicht für die Dropdown-Anzeige an den Browser geliefert werden.
+Nicht deklarierte Konfigurationswerte werden nicht mitgesendet.
+
+Standardantwort ist `{ options: [{ value, label }] }`. `value` muss ein eindeutiger,
+nichtleerer String oder eine endliche Zahl sein; gespeichert wird ein String. `0`
+ist gültig. `label` ist ein optionaler String und bleibt als Gerätename unverändert.
+Bestehende Antworten können durch `optionsSource.resultKey`, `valueKey` und
+`labelKey` abgebildet werden, beispielsweise:
+
+```js
+optionsSource: {
+    action: 'listDevices',
+    parameters: ['ip', 'port', 'apiVersion'],
+    resultKey: 'devices',
+    valueKey: 'id',
+    labelKey: 'name',
+},
+```
+
+Die Zuordnungen beziehen sich auf direkte Objektschlüssel. Ungültige Antworten und
+doppelte Werte zeigen einen Ladefehler; gespeicherte Werte werden nie automatisch
+gelöscht oder durch den ersten Listeneintrag ersetzt. Späte Antworten für ein zuvor
+geöffnetes Feld oder eine alte Verbindung werden ignoriert.
+
+`label`, `placeholder` und Einträge unter `messages` können Strings oder Objekte
+`{ de: '…', en: '…' }` sein. Verfügbare Meldungen sind `choose`, `current`, `loading`,
+`refresh`, `error`, `empty`, `manual`; `current` unterstützt `{{value}}`.
+Rückgabewerte und benutzerdefinierte Namen werden nicht übersetzt.
+
+Die alten Feldtypen `powerview-device-picker` und `somfy-tahoma-device-picker`
+werden für bereits installierte Plugins weiterhin unterstützt. Neue Plugins sollen
+`async-select` verwenden. Für weitere UI-Fähigkeiten außerhalb dieses Schemas kann
+weiterhin eine Erweiterung des allgemeinen Frontend-Renderers erforderlich sein.
 
 ### `dynamicOutputs(data)` _(optional)_
 
@@ -978,18 +1064,26 @@ bzw. wählen bei genau einem Garten automatisch dessen ID. Ungültige IDs oder
 mehrere Gärten ohne Auswahl melden die verfügbaren Standort-IDs in der Diagnose.
 Geräte-ID und Standort-ID sind unterschiedliche Werte.
 
-## Plugin-Dateien auf GitHub Pages veröffentlichen
+## Plugin-Dateien auf dem eigenen Server veröffentlichen
 
-In `kaenix-plugins` unter **Settings → Pages → Build and deployment → Source**
-**GitHub Actions** auswählen. Die Custom Domain bleibt `plugins.kaenix.net`.
-Der Workflow `.github/workflows/pages.yml` veröffentlicht nach einem Push auf
-`main` die Plugin-Dateien mit unveränderten Pfaden. Er lässt sich außerdem unter
-**Actions → Publish plugin files to GitHub Pages → Run workflow** manuell starten.
+Die Verteilung erfolgt über `https://plugins.kaenix.net` am kaenix-Remote-Gateway.
+GitHub dient nur der Quellcode-Versionierung. Im Homeserver-Projekt ausführen:
 
-Der Deploy-Job vergibt `pages: write` und `id-token: write` explizit. Ein persönlicher
-Token oder das Secret `KAENIX_RELEASES_TOKEN` wird dafür nicht benötigt. Nach der
-Umstellung einen neuen Lauf dieses Workflows starten; ein Re-run des alten
-„pages build and deployment“-Laufs übernimmt die neue Workflow-Datei nicht.
+```sh
+./publish.sh plugins
+# Alternativ ein anderes lokal erreichbares Veröffentlichungsziel:
+./publish.sh plugins --output /pfad/zum/plugin-releases
+```
+
+Standardziel ist `/Volumes/docker/kaenix/plugin-releases`. Das Script erstellt einen
+Katalog und unveränderliche Paketstände atomar; ein Commit oder Push ist nicht nötig.
+Benötigt werden Node.js 24 und installierte Backend-Abhängigkeiten (`npm --prefix backend ci`).
+Veröffentlicht werden ausschließlich `*-kaenix.js` sowie gegebenenfalls
+`package.json` und `package-lock.json`. Lokale Abhängigkeiten und Zugangsdaten
+werden nicht übernommen. Pluginänderungen weiterhin mit einer erhöhten Patch-Version
+versehen. Den bisherigen Pages-Workflow deaktivieren und die Domain nach Einrichtung
+des Gateways umstellen; ältere Homeserver benötigen zunächst das neue Backend.
+Details zu Mounts, DNS und Umstellung stehen in `docs/updates.md` im Homeserver-Projekt.
 
 Gardena ab 1.0.3 – Quota-Schutz:
 

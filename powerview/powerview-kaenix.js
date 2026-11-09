@@ -1,6 +1,6 @@
 /**
  * @plugin    PowerView
- * @version   1.0.7
+ * @version   1.0.8
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
@@ -628,7 +628,16 @@ module.exports = {
         {
             key: 'deviceId',
             label: 'Geräte-ID (hat Vorrang)',
-            type: 'powerview-device-picker',
+            type: 'async-select',
+            allowCustomValue: true,
+            showValue: true,
+            optionsSource: {
+                action: 'listDevices',
+                parameters: ['ip', 'port', 'apiVersion'],
+                resultKey: 'devices',
+                valueKey: 'id',
+                labelKey: 'name',
+            },
         },
         {
             key: 'apiVersion',

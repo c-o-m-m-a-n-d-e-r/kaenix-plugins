@@ -3,7 +3,6 @@
 
 # Git-Konfiguration und Repository-Dokumentation behalten.
 !/.gitignore
-!/CNAME
 !/README.md
 
 # Plugin-Einstiegspunkte und reproduzierbare Abhängigkeiten zulassen.
@@ -12,8 +11,3 @@
 !/*/package.json
 !/*/package-lock.json
 !/eufy/README.md
-
-# Eigener GitHub-Pages-Workflow für die Plugin-Veröffentlichung.
-!/.github/
-!/.github/workflows/
-!/.github/workflows/pages.yml
