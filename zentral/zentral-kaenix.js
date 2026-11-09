@@ -1,6 +1,6 @@
 /**
  * @plugin Zentral
- * @version 1.0.0
+ * @version 1.0.1
  * @author Christian Brauwers
  */
 const schemas = {
@@ -186,12 +186,45 @@ function valid(value, dpt) {
     return true;
 }
 
+// Category-specific keys prevent old presets from controlling a different widget type.
+function presetKey(category, handle) {
+    return `preset_${category}_${handle}`;
+}
+function inputValue(inputs, data, port) {
+    const value =
+        inputs[port[0]] ?? data[presetKey(data.widgetCategory, port[0])];
+    if (port[4] === "DPT232.600" && typeof value === "string") {
+        try {
+            return JSON.parse(value);
+        } catch (_) {
+            return undefined;
+        }
+    }
+    return value;
+}
+function presetFields() {
+    return Object.entries(schemas).flatMap(([category, ports]) =>
+        ports
+            .filter((port) => port[2])
+            .map(([handle, label, , , dpt]) => ({
+                key: presetKey(category, handle),
+                label: dpt === "DPT232.600" ? "central_preset_color" : label,
+                type: dpt === "DPT232.600" ? "text" : "number",
+                ...(/^DPT1\./.test(dpt) ? { min: 0, max: 1 } : {}),
+                ...(dpt === "DPT5.001" ? { min: 0, max: 100 } : {}),
+                ...(/^DPT7\./.test(dpt) ? { min: 0, max: 65535 } : {}),
+                ...(/^DPT17\./.test(dpt) ? { min: 0, max: 63 } : {}),
+                ...(/^DPT20\./.test(dpt) ? { min: 0, max: 255 } : {}),
+                visibleWhen: { widgetCategory: [category] },
+            })),
+    );
+}
+
 module.exports = {
     type: "zentral",
     category: "Automatisierung",
     label: "Zentral",
-    description:
-        "Steuert ausgewählte Widgets einer Kategorie gemeinsam und fasst deren Rückmeldungen zusammen.",
+    description: "central_presets_description",
     color: "#f59e0b",
     inputs: [],
     outputs: [],
@@ -225,6 +258,7 @@ module.exports = {
             label: "central_widgets",
             type: "category-widget-checklist",
         },
+        ...presetFields(),
     ],
     dynamicInputs(data) {
         const ports = {
@@ -270,7 +304,10 @@ module.exports = {
                 { handle: "volume", label: "ui_lautstarke_setzen" },
             ],
         };
-        return ports[data?.widgetCategory] || [];
+        return (ports[data?.widgetCategory] || []).map((port) => ({
+            ...port,
+            configKey: `preset_${data.widgetCategory}_${port.handle}`,
+        }));
     },
     dynamicOutputs(data) {
         const ports = {
@@ -336,7 +373,32 @@ module.exports = {
         const command = ports.find(
             (p) => p[0] === context.triggerHandle && p[2],
         );
+        const commands = [];
         if (command && !context.initialInputs) {
+            // Switching on applies optional parameter presets. Stop/next/etc.
+            // stay independent commands and are never replayed as companions.
+            if (
+                ["switch", "power", "play"].includes(command[0]) &&
+                [true, 1, "1"].includes(inputValue(inputs, data, command))
+            ) {
+                commands.push(
+                    ...ports.filter(
+                        (port) =>
+                            port[2] &&
+                            port !== command &&
+                            !/^DPT1\./.test(port[4]) &&
+                            data[presetKey(data.widgetCategory, port[0])] !==
+                                undefined &&
+                            data[presetKey(data.widgetCategory, port[0])] !==
+                                null &&
+                            data[presetKey(data.widgetCategory, port[0])] !==
+                                "",
+                    ),
+                );
+            }
+            commands.push(command);
+        }
+        for (const command of commands) {
             const sent = new Set();
             for (const widget of selected) {
                 // A feedback address must never be used as a command address.
@@ -361,7 +423,7 @@ module.exports = {
                         ? widget.config?.dpt
                         : null) ||
                     command[4];
-                const value = inputs[command[0]];
+                const value = inputValue(inputs, data, command);
                 if (!valid(value, dpt)) {
                     context.warn(
                         `Ungültiger Eingangswert für die Gruppenadresse ${target}`,

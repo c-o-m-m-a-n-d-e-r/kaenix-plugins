@@ -1142,7 +1142,7 @@ aktualisiertes kaenix-Backend/Frontend mit Unterstützung dieser Schnittstelle.
 
 ## Zentral
 
-`zentral/zentral-kaenix.js`, Version **1.0.0**, Kategorie **Automatisierung**.
+`zentral/zentral-kaenix.js`, Version **1.0.1**, Kategorie **Automatisierung**.
 
 Die Node wählt einen Widgettyp als Widgetkategorie und anschließend mehrere
 Widgets aus der gesamten Widgetbibliothek. Gemeinsame Widgets mit mehreren
@@ -1162,6 +1162,17 @@ Befehlsadressen gesendet. Gleiche Gruppenadressen werden pro Telegramm nur einma
 beschrieben. Fehlende Anschlüsse werden übersprungen; Statusadressen dienen nicht
 als Ersatz für Befehlsadressen. Start, Reload und Statusereignisse senden keine
 alten Befehle erneut. Gespeicherte KNX-Datenpunkttypen haben Vorrang.
+
+Die Eingabefelder in der Node-Konfiguration erlauben optionale, je Kategorie
+getrennte Vorgabewerte. Beispiel: **Dimmer → Helligkeit = 50** sendet beim
+Einschalten über `switch = 1` zuerst 50 % und danach den Einschaltbefehl.
+Beim Ausschalten wird keine Helligkeit gesendet. Entsprechend übernehmen
+`power = 1` und `play = 1` vorbelegte Parameter wie Lautstärke oder Betriebsmodus.
+Andere Schaltbefehle (z. B. Stopp oder nächster Titel) werden nicht mitgesendet.
+Empfangene Eingangswerte haben Vorrang, auch 0. Leere Felder bleiben unberücksichtigt;
+ein Ereignis am jeweiligen Eingang kann dessen Vorgabe als Ersatzwert verwenden.
+RGB-Farben werden als JSON mit `red`, `green` und `blue` (je 0–255) eingetragen.
+Start, Reload und Rückmeldungen senden auch bei gesetzten Vorgaben keine Befehle.
 
 Ausgänge berücksichtigen bekannte Rückmeldungen der ausgewählten Widgets:
 Ein/Aus meldet 1, sobald eines aktiv ist; numerische Messwerte und Prozentwerte
