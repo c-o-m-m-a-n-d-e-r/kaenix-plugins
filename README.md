@@ -433,6 +433,31 @@ module.exports = {
 | **Lyngdorf MP-60**   | `lyngdorf`         | Geräte           | Hauptzone über TCP: Power, Lautstärke in Prozent, Quellen, RoomPerfect, Voicing und Audiomodus; [Dokumentation](lyngdorf/README.md)                                             |
 | **Leica Cine 1**     | `leica-cine1`      | Geräte           | Ein/Aus und Quellenwahl über lokales VIDAA/MQTT; eingebautes Client-Zertifikat, automatische PIN-Übermittlung und gespeicherte Kopplung; [Dokumentation](leica-cine1/README.md) |
 
+### Magnetar – Wake on LAN
+
+Version **1.0.1**. In der Magnetar-Node die Player-IP, die optionale LAN-MAC-Adresse
+und die Broadcast-Adresse eintragen. Beispiel für das lokale Gerät:
+IP `192.168.2.182`, MAC `f0:87:7f:00:22:59`, Broadcast `192.168.2.255`
+(bei Subnetzmaske `255.255.255.0`). Ohne Vorgabe gilt `255.255.255.255`.
+
+`power = 1` sendet bei bestehender TCP-Verbindung weiterhin `PON`, andernfalls
+bei hinterlegter MAC-Adresse ein Magic Packet über UDP-Port 9. Der Eingang
+`wake = 1` sendet unabhängig von der TCP-Verbindung ein Magic Packet. `power = 0`
+und andere Befehle wecken den Player nicht. Start, Reload und gespeicherte
+Eingangswerte lösen kein WoL aus. Befehle werden nach dem Aufwecken nicht
+automatisch nachgesendet.
+
+`wakeStatus` meldet nur den erfolgreichen Versand, keine Bestätigung des
+Einschaltzustands. `connected` bleibt der TCP-Verbindungsstatus und
+`acknowledged` bestätigt ausschließlich TCP-Befehle. Das Gerät muss WoL im
+Standby unterstützen und entsprechend konfiguriert sein. Ein Test mit bereits
+eingeschaltetem Player bestätigt nicht das Aufwecken aus Standby.
+
+WoL wird vom Homeserver im lokalen Netzwerk gesendet, auch bei Bedienung über
+das Remote-Gateway. Zusätzliche Gateway-Routen sind nicht erforderlich.
+Für die neuen DE/EN-Texte das Frontend neu bauen und gemeinsam mit dem Plugin
+aktualisieren; die vorhandene Auslieferung des Homeserver-Frontends bleibt bestehen.
+
 ### Leica Cine 1 – Einrichtung
 
 Version **1.0.4**. Projektor-IP und MAC-Adresse in der Node eintragen. Falls der

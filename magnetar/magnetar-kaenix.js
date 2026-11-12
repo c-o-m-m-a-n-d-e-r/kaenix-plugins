@@ -1,6 +1,6 @@
 /**
  * @plugin Magnetar
- * @version 1.0.0
+ * @version 1.0.1
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -10,6 +10,7 @@
  */
 "use strict";
 const net = require("node:net");
+const dgram = require("node:dgram");
 const states = new Map();
 const keys = new Set(
     "POW EJT PON POF DIM PUR VUP VDN MUT NU0 NU1 NU2 NU3 NU4 NU5 NU6 NU7 NU8 NU9 CLR GOT HOM OSD TTL MNU NUP NLT NRT NDN SEL SET RET RED GRN BLU YLW STP PLA PAU PRE REV FWD NXT AUD SUB ANG ZOM SAP ATB RPT PIP HDM SUH OPT SEH HDR".split(
@@ -61,7 +62,67 @@ function stop(id) {
     clearTimeout(s.retry);
     clearTimeout(s.deadline);
     clearTimeout(s.gap);
+    s.stopWake?.();
     s.socket?.destroy();
+}
+
+function wake(s) {
+    if (!s.cfg.mac)
+        throw new Error("Magnetar: Zum Aufwecken MAC-Adresse eintragen");
+    if (s.stopWake) return;
+    emit(s, "wakeStatus", "");
+    const mac = Buffer.from(s.cfg.mac, "hex");
+    const packet = Buffer.concat([
+        Buffer.alloc(6, 255),
+        ...Array(16).fill(mac),
+    ]);
+    const socket = dgram.createSocket("udp4");
+    let ended = false;
+    let deadline;
+    const active = () => !ended && states.get(s.id) === s;
+    const finish = () => {
+        if (ended) return;
+        ended = true;
+        clearTimeout(deadline);
+        s.stopWake = null;
+        try {
+            socket.close();
+        } catch (error) {
+            if (error.code !== "ERR_SOCKET_DGRAM_NOT_RUNNING") throw error;
+        }
+    };
+    const fail = () => {
+        if (active())
+            report(s, "Magnetar: Wake-on-LAN konnte nicht gesendet werden");
+        finish();
+    };
+    s.stopWake = finish;
+    socket.on("error", fail);
+    deadline = setTimeout(fail, 3000);
+    deadline.unref?.();
+    try {
+        socket.bind(0, () => {
+            if (!active()) return;
+            try {
+                socket.setBroadcast(true);
+                socket.send(packet, 9, s.cfg.broadcast, (error) => {
+                    if (!active()) return;
+                    if (error) return fail();
+                    emit(s, "error", "");
+                    emit(
+                        s,
+                        "wakeStatus",
+                        "Magnetar: Wake-on-LAN gesendet; Einschalten unbestätigt",
+                    );
+                    finish();
+                });
+            } catch {
+                fail();
+            }
+        });
+    } catch {
+        fail();
+    }
 }
 
 function pump(s) {
@@ -180,7 +241,32 @@ function options(data) {
         !validNumber(timeout, 1, 30)
     )
         throw new Error("Magnetar: IP-Adresse, Port oder Zeitlimit ungültig");
-    return { host, port: Number(port), timeout: Number(timeout) };
+    const rawMac = data.mac ?? "";
+    const broadcast = data.broadcast ?? "255.255.255.255";
+    if (
+        typeof rawMac !== "string" ||
+        (rawMac.trim() !== "" &&
+            !/^(?:[\da-f]{12}|[\da-f]{2}(:[\da-f]{2}){5}|[\da-f]{2}(-[\da-f]{2}){5})$/i.test(
+                rawMac.trim(),
+            )) ||
+        typeof broadcast !== "string" ||
+        net.isIP(broadcast.trim()) !== 4
+    )
+        throw new Error(
+            "Magnetar: MAC-Adresse oder Broadcast-Adresse ungültig",
+        );
+    const mac = rawMac.trim().replace(/[:-]/g, "").toLowerCase();
+    if (mac && (mac === "000000000000" || parseInt(mac.slice(0, 2), 16) & 1))
+        throw new Error(
+            "Magnetar: MAC-Adresse oder Broadcast-Adresse ungültig",
+        );
+    return {
+        host,
+        port: Number(port),
+        timeout: Number(timeout),
+        mac,
+        broadcast: broadcast.trim(),
+    };
 }
 
 function commandFor(handle, value) {
@@ -217,11 +303,13 @@ module.exports = {
             label: "Fernbedienungscode (z. B. RED, NU1, SET)",
         },
         { handle: "reconnect", label: "Neu verbinden" },
+        { handle: "wake", label: "Wake-on-LAN (Trigger)" },
     ],
     outputs: [
         { handle: "connected", label: "TCP-Verbindung (1/0)" },
         { handle: "acknowledged", label: "Bestätigter Befehl (Code)" },
         { handle: "error", label: "Fehler" },
+        { handle: "wakeStatus", label: "Wake-on-LAN-Sendestatus" },
     ],
     config: [
         {
@@ -231,6 +319,17 @@ module.exports = {
             placeholder: "192.168.1.80",
         },
         { key: "port", label: "TCP-Port", type: "number", default: 8102 },
+        {
+            key: "mac",
+            label: "MAC-Adresse (Wake-on-LAN)",
+            type: "text",
+        },
+        {
+            key: "broadcast",
+            label: "Wake-on-LAN Broadcast-Adresse",
+            type: "text",
+            default: "255.255.255.255",
+        },
         {
             key: "timeout",
             label: "Antwortzeitlimit in Sekunden (1–30)",
@@ -271,12 +370,20 @@ module.exports = {
                 connect(s);
             }
             s.context = context;
+            if (context.triggerHandle === "wake" && triggered(inputs.wake)) {
+                wake(s);
+                return {};
+            }
             // Startup and persisted inputs never cause remote-control actions.
             const command = commandFor(
                 context.triggerHandle,
                 inputs[context.triggerHandle],
             );
             if (!command) return {};
+            if (!s.connected && command === "PON" && s.cfg.mac) {
+                wake(s);
+                return {};
+            }
             if (!s.connected)
                 throw new Error("Magnetar: Nicht verbunden; Befehl verworfen");
             if (s.queue.length >= 16)
