@@ -1264,3 +1264,18 @@ und [kwesolowski/node-red-contrib-philips-airplus](https://github.com/kwesolowsk
 Die AC2220-Feldzuordnung wurde mit der AC2210/AC2220/AC2221-Modellfamilie von
 [tinkerologie/ha-philips-airpurifier](https://github.com/tinkerologie/ha-philips-airpurifier/blob/8cf8cb83967357ec7ddfbd8f8a6115d31f26a2d4/custom_components/philips_airpurifier/device_models.py)
 abgeglichen. Lizenzhinweise stehen in der Plugin-Datei.
+
+## Eigene Übersetzungen
+
+Neue Plugins bringen ihre DE/EN-Texte in einem literalen
+`translations: { de: { ... }, en: { ... } }` direkt in `module.exports` mit.
+Beschriftungen, Beschreibungen, Platzhalter und Meldungen können auf dessen
+Schlüssel verweisen. Schlüssel gelten nur innerhalb des jeweiligen Plugins;
+technische Kennungen und benutzerdefinierte Namen bleiben unverändert.
+Beide Sprachen müssen dieselben Schlüssel und `{{platzhalter}}` enthalten.
+Keine Funktionen, Spreads oder externen Dateien im Katalog verwenden, damit der
+Plugin-Store die Texte auch vor einer Installation sicher auslesen kann.
+
+Das vollständige Format samt Beispiel, Migration und Rückfallverhalten steht in
+[UI-Übersetzungen](../docs/translations.md#eigene-sprachkataloge-für-plugins).
+Neue Plugin-Texte benötigen keine Ergänzungen im zentralen Frontend-Katalog.

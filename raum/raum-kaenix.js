@@ -1,11 +1,51 @@
 /**
  * @plugin    Raum
- * @version   1.0.6
+ * @version   1.0.7
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
  */
 module.exports = {
+    translations: {
+        de: {
+            room_description:
+                "Überwacht ausgewählte Widgets eines Raums. Status = 1, sobald mindestens ein Widget eingeschaltet ist. Schaltet über Befehlsadressen; optional wird beim Einschalten die Helligkeit mitgesendet.",
+            room_switch: "Schalten (0=Aus, 1=Ein)",
+            room_status: "Status (1=Ein)",
+            room_widgets: "Überwachte Widgets",
+            room_brightness: "Helligkeit (%)",
+            room_send_brightness: "Helligkeit beim Einschalten mitsenden",
+            room_brightness_preset:
+                "Helligkeit vorbelegen (0–100 %, Eingang hat Vorrang)",
+            room_invalid_brightness:
+                "Helligkeit erwartet einen Wert von 0 bis 100 %.",
+            room_invalid_switch: "Schalteingang erwartet 0 oder 1.",
+            sch_widget_room: "Raum",
+            ui_out: "out",
+            logic_category: "Logik",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+        },
+        en: {
+            room_description:
+                "Monitors selected widgets in a room. Status = 1 when any widget is on. Uses command addresses for switching; optionally sends brightness when switching on.",
+            room_switch: "Switch (0=Off, 1=On)",
+            room_status: "Status (1=On)",
+            room_widgets: "Monitored widgets",
+            room_brightness: "Brightness (%)",
+            room_send_brightness: "Send brightness when switching on",
+            room_brightness_preset:
+                "Brightness preset (0–100%, input takes precedence)",
+            room_invalid_brightness:
+                "Brightness requires a value from 0 to 100%.",
+            room_invalid_switch: "Switch input requires 0 or 1.",
+            sch_widget_room: "Room",
+            ui_out: "out",
+            logic_category: "Logic",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+        },
+    },
     type: "raum",
     category: "Logik",
     label: "Raum",

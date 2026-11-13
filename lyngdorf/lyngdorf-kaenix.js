@@ -1,6 +1,6 @@
 /**
  * @plugin Lyngdorf MP-60
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -300,6 +300,114 @@ function command(s, handle, value) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            lyngdorf_ip: "IP-Adresse",
+            lyngdorf_refresh: "Status abfragen (Trigger)",
+            lyngdorf_mute: "Stumm (0/1)",
+            lyngdorf_volume_down: "Leiser (Trigger)",
+            lyngdorf_volume_up: "Lauter (Trigger)",
+            lyngdorf_volume_step:
+                "Lautstärkeschritt in Prozentpunkten (0,1–10)",
+            lyngdorf_interval: "Statusintervall in Sekunden (2–300)",
+            lyngdorf_port: "TCP-Port",
+            lyngdorf_video_format: "Video-Signalformat",
+            lyngdorf_audio_format: "Audio-Signalformat",
+            lyngdorf_audiomode_output: "Aktive Audiomodus-ID",
+            lyngdorf_voicing_output: "Aktive Voicing-ID",
+            lyngdorf_roomperfect_output: "Aktive RoomPerfect-Position",
+            lyngdorf_source_name: "Aktiver Quellenname",
+            lyngdorf_volume_output: "Lautstärke (0–100 %)",
+            lyngdorf_audiomode_input: "Audiomodus-ID (ab 0)",
+            lyngdorf_voicing_input: "Voicing-ID (ab 0)",
+            lyngdorf_roomperfect_input:
+                "RoomPerfect (0=Bypass, 1–4=Fokus, 9=Global)",
+            lyngdorf_source_previous: "Vorherige Quelle (Trigger)",
+            lyngdorf_source_next: "Nächste Quelle (Trigger)",
+            lyngdorf_source_input: "Quellen-ID (ab 0)",
+            lyngdorf_mute_toggle: "Stumm umschalten (Trigger)",
+            lyngdorf_volume_input: "Lautstärke (0–100 %)",
+            lyngdorf_start_failed:
+                "Lyngdorf: Verbindung konnte nicht gestartet werden",
+            lyngdorf_offline: "Lyngdorf: Nicht verbunden; Befehl verworfen",
+            lyngdorf_invalid_id:
+                "Lyngdorf: Ungültige Quellen-, RoomPerfect-, Voicing- oder Audiomodus-ID",
+            lyngdorf_invalid_volume:
+                "Lyngdorf: Lautstärke erwartet 0 bis 100 %",
+            lyngdorf_invalid_boolean:
+                "Lyngdorf: Ein/Aus und Stumm erwarten 0 oder 1",
+            lyngdorf_connection_lost:
+                "Lyngdorf: Verbindung unterbrochen; erneuter Verbindungsversuch folgt",
+            lyngdorf_invalid_config:
+                "Lyngdorf: IP-Adresse, Port, Intervall oder Schrittweite ungültig",
+            lyngdorf_description:
+                "Lyngdorf MP-60: Hauptzone über TCP mit Power, Lautstärke, Quellen und RoomPerfect steuern",
+            common_device_category: "Geräte",
+            philips_power: "Ein/Aus (1/0)",
+            philips_reconnect: "Neu verbinden",
+            philips_error: "Fehler",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            leica_power_input: "Ein/Aus (1/0)",
+            leica_reconnect: "Neu verbinden",
+            leica_connected: "Geräteverbindung (1/0)",
+            leica_source_output: "Aktive Quellen-ID",
+            leica_error: "Fehler",
+        },
+        en: {
+            connected: "Connected",
+            lyngdorf_ip: "IP address",
+            lyngdorf_refresh: "Query status (trigger)",
+            lyngdorf_mute: "Mute (0/1)",
+            lyngdorf_volume_down: "Volume down (trigger)",
+            lyngdorf_volume_up: "Volume up (trigger)",
+            lyngdorf_volume_step: "Volume step in percentage points (0.1–10)",
+            lyngdorf_interval: "Status interval in seconds (2–300)",
+            lyngdorf_port: "TCP port",
+            lyngdorf_video_format: "Video signal format",
+            lyngdorf_audio_format: "Audio signal format",
+            lyngdorf_audiomode_output: "Active audio mode ID",
+            lyngdorf_voicing_output: "Active voicing ID",
+            lyngdorf_roomperfect_output: "Active RoomPerfect position",
+            lyngdorf_source_name: "Active source name",
+            lyngdorf_volume_output: "Volume (0–100 %)",
+            lyngdorf_audiomode_input: "Audio mode ID (starting at 0)",
+            lyngdorf_voicing_input: "Voicing ID (starting at 0)",
+            lyngdorf_roomperfect_input:
+                "RoomPerfect (0=bypass, 1–4=focus, 9=global)",
+            lyngdorf_source_previous: "Previous source (trigger)",
+            lyngdorf_source_next: "Next source (trigger)",
+            lyngdorf_source_input: "Source ID (starting at 0)",
+            lyngdorf_mute_toggle: "Toggle mute (trigger)",
+            lyngdorf_volume_input: "Volume (0–100 %)",
+            lyngdorf_start_failed: "Lyngdorf: connection could not be started",
+            lyngdorf_offline: "Lyngdorf: not connected; command discarded",
+            lyngdorf_invalid_id:
+                "Lyngdorf: invalid source, RoomPerfect, voicing or audio mode ID",
+            lyngdorf_invalid_volume: "Lyngdorf: volume requires 0 to 100 %",
+            lyngdorf_invalid_boolean: "Lyngdorf: power and mute require 0 or 1",
+            lyngdorf_connection_lost:
+                "Lyngdorf: connection lost; reconnection will follow",
+            lyngdorf_invalid_config:
+                "Lyngdorf: invalid IP address, port, interval or step size",
+            lyngdorf_description:
+                "Lyngdorf MP-60: control the main zone over TCP with power, volume, sources and RoomPerfect",
+            common_device_category: "Devices",
+            philips_power: "On/off (1/0)",
+            philips_reconnect: "Reconnect",
+            philips_error: "Error",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            leica_power_input: "Power (1/0)",
+            leica_reconnect: "Reconnect",
+            leica_connected: "Device connection (1/0)",
+            leica_source_output: "Active source ID",
+            leica_error: "Error",
+        },
+    },
     type: "lyngdorf",
     label: "Lyngdorf MP-60",
     category: "Geräte",

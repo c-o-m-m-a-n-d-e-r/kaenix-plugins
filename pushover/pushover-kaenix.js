@@ -1,6 +1,6 @@
 /**
  * @plugin    Pushover
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -47,6 +47,44 @@ function sendPushover(payload) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            carplay_trigger: "Auslösen",
+            native_value: "Wert",
+            sch_widget_value: "Wert",
+            dash_col_value: "Wert",
+            addr_value_placeholder: "Wert",
+            sch_trigger_type: "Auslöser",
+            sch_col_value: "Wert",
+            scn_trigger: "Trigger",
+            scn_action_value: "Wert",
+            ui_in_57: "in",
+            ui_offnen: "Öffnen",
+            ui_auslosen: "Auslösen",
+            ui_titel: "Titel",
+            ui_https: "https://…",
+            hvac_value: "Wert",
+            history_value_axis: "Wert",
+        },
+        en: {
+            carplay_trigger: "Trigger",
+            native_value: "Value",
+            sch_widget_value: "Value",
+            dash_col_value: "Value",
+            addr_value_placeholder: "Value",
+            sch_trigger_type: "Trigger",
+            sch_col_value: "Value",
+            scn_trigger: "Trigger",
+            scn_action_value: "Value",
+            ui_in_57: "in",
+            ui_offnen: "Open",
+            ui_auslosen: "Trigger",
+            ui_titel: "Title",
+            ui_https: "https://…",
+            hvac_value: "Value",
+            history_value_axis: "Value",
+        },
+    },
     type: "pushover",
     category: "Benachrichtigung",
     label: "Pushover",

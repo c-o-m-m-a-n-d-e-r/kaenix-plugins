@@ -1,6 +1,6 @@
 /**
  * @plugin    Shelly
- * @version   1.0.7
+ * @version   1.0.8
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -584,6 +584,46 @@ async function cmdFwUpdate(state, cfg) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            addr_pw_label: "Passwort",
+            lyngdorf_ip: "IP-Adresse",
+            lyngdorf_refresh: "Status abfragen (Trigger)",
+            native_auth_username: "Benutzername",
+            native_auth_password: "Passwort",
+            ui_restart_no: "Nein",
+            ui_restart_yes: "Ja",
+            ui_blau: "Blau",
+            ui_grun: "Grün",
+            ui_rot: "Rot",
+            ui_benutzername: "Benutzername",
+            ui_port: "Port",
+            common_device_category: "Geräte",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_percent: "percent",
+        },
+        en: {
+            connected: "Connected",
+            addr_pw_label: "Password",
+            lyngdorf_ip: "IP address",
+            lyngdorf_refresh: "Query status (trigger)",
+            native_auth_username: "Username",
+            native_auth_password: "Password",
+            ui_restart_no: "No",
+            ui_restart_yes: "Yes",
+            ui_blau: "Blue",
+            ui_grun: "Green",
+            ui_rot: "Red",
+            ui_benutzername: "Username",
+            ui_port: "Port",
+            common_device_category: "Devices",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_percent: "Percentage",
+        },
+    },
     type: "shelly",
     category: "Geräte",
     label: "Shelly",

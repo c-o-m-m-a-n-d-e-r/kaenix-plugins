@@ -1,6 +1,6 @@
 /**
  * @plugin Eufy Kameras
- * @version 1.0.2
+ * @version 1.0.3
  * @author kaenix
  */
 const { PassThrough } = require("node:stream");
@@ -542,11 +542,149 @@ class EufyProvider {
 
 let provider;
 module.exports = {
+    translations: {
+        de: {
+            nav_visu_cameras: "Kameras",
+            eufy_stream_starting: "P2P-Livestream wird angefordert.",
+            eufy_stream_waiting: "P2P-Stream geöffnet; warte auf Videodaten.",
+            eufy_stream_receiving:
+                "P2P-Videodaten werden an go2rtc weitergegeben.",
+            eufy_stream_stopped: "Der Videoabnehmer hat den Stream beendet.",
+            eufy_stream_cancelled:
+                "Der Videoabruf wurde vor dem ersten Bild beendet.",
+            eufy_stream_start_timeout:
+                "Eufy liefert nach dem P2P-Start kein Stream-Ereignis. Anmeldung und Kamerasuche sind davon unabhängig.",
+            eufy_stream_no_data:
+                "Der Eufy-P2P-Stream liefert keine weiteren Videodaten.",
+            eufy_stream_backpressure:
+                "Der Videoabnehmer verarbeitet den Eufy-Stream nicht rechtzeitig.",
+            eufy_stream_p2p_error:
+                "Der Eufy-P2P-Stream konnte nicht geöffnet oder entschlüsselt werden.",
+            eufy_stream_p2p_stopped: "Eufy hat den P2P-Stream beendet.",
+            eufy_dependency_missing:
+                "Die Eufy-Bibliothek fehlt. Bitte das Plugin vollständig aktualisieren.",
+            eufy_dependency_outdated:
+                "Die installierte Eufy-Bibliothek passt nicht zum Plugin. Bitte das Plugin einschließlich Abhängigkeiten aktualisieren.",
+            eufy_runtime_unsupported:
+                "Die Laufzeit ist mit der Eufy-Bibliothek nicht kompatibel. Bitte Homeserver und Plugin gemeinsam aktualisieren.",
+            eufy_sdk_init_failed:
+                "Die Eufy-Bibliothek konnte nicht initialisiert werden. Bitte die Verbindungsdetails prüfen.",
+            eufy_auth_rejected:
+                "Eufy hat die Plugin-Anmeldung zurückgewiesen. Bitte Kontoregion und Anmeldung mit E-Mail und Passwort prüfen.",
+            eufy_rate_limited:
+                "Eufy hat Anmeldeversuche vorübergehend begrenzt. Bitte später erneut versuchen.",
+            eufy_network_failed:
+                "Der Homeserver konnte die Eufy-Anmeldung nicht erreichen. Bitte die Verbindungsdetails prüfen.",
+            camera_provider_invalid: "Ungültige Kamera-Plugin-Schnittstelle",
+            camera_provider_unavailable:
+                "Das Kamera-Plugin ist nicht verfügbar.",
+            eufy_plugin_description:
+                "Eufy-Kameras über P2P mit bestehender HomeBase-Anbindung einbinden.",
+            eufy_username: "Eufy-Konto (E-Mail)",
+            eufy_password: "Eufy-Passwort",
+            eufy_country_invalid:
+                "Bitte die Kontoregion als zweistelligen Großbuchstabencode eingeben (z. B. DE).",
+            eufy_country: "Kontoregion (z. B. DE)",
+            eufy_login: "Bei Eufy anmelden",
+            eufy_verify_code: "Anmeldung bestätigen",
+            eufy_verify_captcha: "Bildcode bestätigen",
+            eufy_code: "Bestätigungscode",
+            eufy_captcha_code: "Code aus dem Bild",
+            eufy_captcha_image: "Eufy-Bildcode zur Anmeldung",
+            eufy_logout: "Abmelden",
+            eufy_disconnected: "Nicht bei Eufy angemeldet.",
+            eufy_connected: "Mit Eufy verbunden.",
+            eufy_connecting: "Verbindung zu Eufy wird aufgebaut.",
+            eufy_mfa_required: "Eufy benötigt einen Bestätigungscode.",
+            eufy_captcha_required:
+                "Eufy benötigt den Code aus dem angezeigten Bild.",
+            eufy_credentials_required:
+                "Bitte Eufy-Konto und Passwort eingeben.",
+            eufy_connection_failed:
+                "Die Verbindung zu Eufy ist fehlgeschlagen.",
+            eufy_timeout: "Eufy hat nicht rechtzeitig geantwortet.",
+            eufy_stream_unavailable: "Der Eufy-Livestream ist nicht verfügbar.",
+            eufy_codec_unsupported:
+                "Der Eufy-Video-Codec wird nicht unterstützt.",
+            eufy_busy: "Die Eufy-Anbindung ist noch beschäftigt.",
+            eufy_code_invalid: "Bitte einen gültigen Eufy-Code eingeben.",
+            ui_platziert: " platziert.",
+            philips_error: "Fehler",
+            logic_convert_string: "string",
+            leica_error: "Fehler",
+        },
+        en: {
+            nav_visu_cameras: "Cameras",
+            eufy_stream_starting: "Requesting the P2P livestream.",
+            eufy_stream_waiting: "P2P stream opened; waiting for video data.",
+            eufy_stream_receiving: "Forwarding P2P video data to go2rtc.",
+            eufy_stream_stopped: "The video consumer closed the stream.",
+            eufy_stream_cancelled:
+                "The video request ended before the first frame.",
+            eufy_stream_start_timeout:
+                "Eufy did not produce a stream event after the P2P start. Sign-in and camera discovery are independent of this.",
+            eufy_stream_no_data:
+                "The Eufy P2P stream is not delivering further video data.",
+            eufy_stream_backpressure:
+                "The video consumer is not processing the Eufy stream in time.",
+            eufy_stream_p2p_error:
+                "The Eufy P2P stream could not be opened or decrypted.",
+            eufy_stream_p2p_stopped: "Eufy ended the P2P stream.",
+            eufy_dependency_missing:
+                "The Eufy library is missing. Please update the complete plugin.",
+            eufy_dependency_outdated:
+                "The installed Eufy library does not match the plugin. Please update the plugin including its dependencies.",
+            eufy_runtime_unsupported:
+                "The runtime is incompatible with the Eufy library. Please update the homeserver and plugin together.",
+            eufy_sdk_init_failed:
+                "The Eufy library could not be initialized. Please check the connection details.",
+            eufy_auth_rejected:
+                "Eufy rejected the plugin sign-in. Please check the account region and email/password sign-in.",
+            eufy_rate_limited:
+                "Eufy has temporarily limited sign-in attempts. Please try again later.",
+            eufy_network_failed:
+                "The homeserver could not reach Eufy sign-in. Please check the connection details.",
+            camera_provider_invalid: "Invalid camera plugin interface",
+            camera_provider_unavailable: "The camera plugin is unavailable.",
+            eufy_plugin_description:
+                "Connect Eufy cameras over P2P while keeping their HomeBase connection.",
+            eufy_username: "Eufy account (email)",
+            eufy_password: "Eufy password",
+            eufy_country_invalid:
+                "Please enter the account region as a two-letter uppercase code (e.g. DE).",
+            eufy_country: "Account region (e.g. DE)",
+            eufy_login: "Sign in to Eufy",
+            eufy_verify_code: "Confirm sign-in",
+            eufy_verify_captcha: "Confirm image code",
+            eufy_code: "Verification code",
+            eufy_captcha_code: "Code from the image",
+            eufy_captcha_image: "Eufy sign-in image challenge",
+            eufy_logout: "Sign out",
+            eufy_disconnected: "Not signed in to Eufy.",
+            eufy_connected: "Connected to Eufy.",
+            eufy_connecting: "Connecting to Eufy.",
+            eufy_mfa_required: "Eufy requires a verification code.",
+            eufy_captcha_required:
+                "Eufy requires the code from the displayed image.",
+            eufy_credentials_required:
+                "Please enter your Eufy account and password.",
+            eufy_connection_failed: "The connection to Eufy failed.",
+            eufy_timeout: "Eufy did not respond in time.",
+            eufy_stream_unavailable: "The Eufy livestream is unavailable.",
+            eufy_codec_unsupported: "The Eufy video codec is unsupported.",
+            eufy_busy: "The Eufy connection is still busy.",
+            eufy_code_invalid: "Please enter a valid Eufy code.",
+            ui_platziert: ".",
+            philips_error: "Error",
+            logic_convert_string: "Text",
+            leica_error: "Error",
+        },
+    },
     type: "eufy",
     label: "Eufy",
     category: "Kameras",
     description: "eufy_plugin_description",
-    version: "1.0.2",
+    version: "1.0.3",
     requiresDependencies: true,
     globalSettings: [
         { key: "username", label: "eufy_username", type: "text" },

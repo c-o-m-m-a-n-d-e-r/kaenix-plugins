@@ -1,35 +1,35 @@
 /**
  * @plugin    PowerView
- * @version   1.0.8
+ * @version   1.0.9
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Protocol reference: https://github.com/sander76/aio-powerview-api
  */
-'use strict';
-const http = require('http');
+"use strict";
+const http = require("http");
 const states = new Map();
 const commands = [
-    'upDown',
-    'open',
-    'close',
-    'stop',
-    'position',
-    'slats',
-    'scene',
-    'triggerStatus',
+    "upDown",
+    "open",
+    "close",
+    "stop",
+    "position",
+    "slats",
+    "scene",
+    "triggerStatus",
 ];
-const configKeys = ['ip', 'port', 'deviceName', 'deviceId', 'interval'];
+const configKeys = ["ip", "port", "deviceName", "deviceId", "interval"];
 const bit = (v) =>
-    [0, '0', false].includes(v)
+    [0, "0", false].includes(v)
         ? 0
-        : [1, '1', true].includes(v)
+        : [1, "1", true].includes(v)
           ? 1
           : undefined;
 const numeric = (v) =>
     v !== null &&
     v !== undefined &&
-    v !== '' &&
-    typeof v !== 'boolean' &&
+    v !== "" &&
+    typeof v !== "boolean" &&
     Number.isFinite(Number(v));
 const pct = (v) =>
     numeric(v) && Number(v) >= 0 && Number(v) <= 100 ? Number(v) : undefined;
@@ -41,12 +41,12 @@ function emit(s, key, value) {
 }
 function connected(s, value) {
     if (s.disposed) return;
-    emit(s, 'connected', value);
+    emit(s, "connected", value);
     s.context.setNodeStatus?.(!!value);
 }
 function request(s, method, path, body) {
     return new Promise((resolve, reject) => {
-        if (s.disposed) return reject(new Error('Node gestoppt'));
+        if (s.disposed) return reject(new Error("Node gestoppt"));
         const payload = body === undefined ? undefined : JSON.stringify(body);
         const req = http.request(
             {
@@ -56,31 +56,31 @@ function request(s, method, path, body) {
                 method,
                 timeout: 10000,
                 headers: {
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                     ...(payload
-                        ? { 'Content-Length': Buffer.byteLength(payload) }
+                        ? { "Content-Length": Buffer.byteLength(payload) }
                         : {}),
                 },
             },
             (res) => {
-                let raw = '';
-                res.on('error', reject);
-                res.on('aborted', () =>
-                    reject(new Error('PowerView-Antwort abgebrochen')),
+                let raw = "";
+                res.on("error", reject);
+                res.on("aborted", () =>
+                    reject(new Error("PowerView-Antwort abgebrochen")),
                 );
-                res.on('data', (chunk) => {
+                res.on("data", (chunk) => {
                     raw += chunk;
                     if (raw.length > 4 * 1024 * 1024)
-                        req.destroy(new Error('Antwort zu groß'));
+                        req.destroy(new Error("Antwort zu groß"));
                 });
-                res.on('end', () => {
+                res.on("end", () => {
                     if (
                         res.statusCode < 200 ||
                         res.statusCode >= 300 ||
                         res.statusCode === 204
                     ) {
                         const error = new Error(
-                            `PowerView HTTP ${res.statusCode}${[204, 423].includes(res.statusCode) ? ' – Hub in Wartung' : ''}`,
+                            `PowerView HTTP ${res.statusCode}${[204, 423].includes(res.statusCode) ? " – Hub in Wartung" : ""}`,
                         );
                         error.status = res.statusCode;
                         return reject(error);
@@ -89,7 +89,7 @@ function request(s, method, path, body) {
                         resolve(raw ? JSON.parse(raw) : null);
                     } catch {
                         const error = new Error(
-                            'Ungültige PowerView-JSON-Antwort',
+                            "Ungültige PowerView-JSON-Antwort",
                         );
                         error.invalidJSON = true;
                         reject(error);
@@ -98,22 +98,22 @@ function request(s, method, path, body) {
             },
         );
         s.requests.add(req);
-        req.on('close', () => s.requests.delete(req));
-        req.on('error', reject);
-        req.on('timeout', () =>
-            req.destroy(new Error('PowerView Zeitüberschreitung')),
+        req.on("close", () => s.requests.delete(req));
+        req.on("error", reject);
+        req.on("timeout", () =>
+            req.destroy(new Error("PowerView Zeitüberschreitung")),
         );
         req.end(payload);
     });
 }
 async function detect(s) {
     if (s.version) return;
-    if (s.cfg.apiVersion !== 'auto') {
+    if (s.cfg.apiVersion !== "auto") {
         s.version = Number(s.cfg.apiVersion);
         return;
     }
     try {
-        const raw = await request(s, 'GET', '/api/fwversion');
+        const raw = await request(s, "GET", "/api/fwversion");
         const fw = (raw?.userData || raw?.config || raw)?.firmware
             ?.mainProcessor;
         if (fw && numeric(fw.revision)) {
@@ -126,33 +126,33 @@ async function detect(s) {
         if (![404, 405].includes(error.status) && !error.invalidJSON)
             throw error;
     }
-    const gateway = await request(s, 'GET', '/gateway/info');
+    const gateway = await request(s, "GET", "/gateway/info");
     if (!gateway || (!gateway.fwVersion && !gateway.firmware))
         throw new Error(
-            'PowerView-API nicht erkannt; API-Version manuell auswählen',
+            "PowerView-API nicht erkannt; API-Version manuell auswählen",
         );
     s.version = 3;
 }
-const base = (s) => (s.version === 3 ? '/home' : '/api');
+const base = (s) => (s.version === 3 ? "/home" : "/api");
 function list(raw, key, version) {
     const result = version === 3 ? raw : raw?.[key];
-    if (!Array.isArray(result)) throw new Error('Ungültige PowerView-Liste');
+    if (!Array.isArray(result)) throw new Error("Ungültige PowerView-Liste");
     return result;
 }
 function name(item) {
     return (
         item.ptName ||
         item.name_unicode ||
-        (item.name ? Buffer.from(item.name, 'base64').toString('utf8') : '')
+        (item.name ? Buffer.from(item.name, "base64").toString("utf8") : "")
     );
 }
 function select(items, id, label, kind) {
     const matches = items.filter((d) =>
-        id !== '' ? String(d.id) === String(id) : name(d) === label,
+        id !== "" ? String(d.id) === String(id) : name(d) === label,
     );
     if (matches.length !== 1)
         throw new Error(
-            `${kind} ${matches.length ? 'nicht eindeutig – ID verwenden' : 'nicht gefunden'}`,
+            `${kind} ${matches.length ? "nicht eindeutig – ID verwenden" : "nicht gefunden"}`,
         );
     return matches[0];
 }
@@ -179,7 +179,7 @@ function axes(s, d) {
     if (s.version === 3) return p;
     const result = {};
     for (const i of [1, 2]) {
-        const key = { 1: 'primary', 2: 'secondary', 3: 'tilt' }[
+        const key = { 1: "primary", 2: "secondary", 3: "tilt" }[
             p[`posKind${i}`]
         ];
         if (key && numeric(p[`position${i}`]))
@@ -195,15 +195,15 @@ function tiltMax(s, d) {
         : 1;
 }
 const parsePercentValue = (v) => {
-    if (v === null || v === undefined || typeof v === 'boolean')
+    if (v === null || v === undefined || typeof v === "boolean")
         return undefined;
-    const clean = String(v).replace('%', '').trim();
-    if (clean === '') return undefined;
+    const clean = String(v).replace("%", "").trim();
+    if (clean === "") return undefined;
     const n = Number(clean);
     return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
 function parseBattery(s, d) {
-    if (!d || typeof d !== 'object')
+    if (!d || typeof d !== "object")
         return { battery: undefined, warning: undefined };
 
     // Explicit hardwired power supply (1 = hardwired, 12 = fixed hardwired)
@@ -217,17 +217,17 @@ function parseBattery(s, d) {
 
     // 1. Check nested battery object or direct battery value
     const bat = d.battery;
-    if (bat && typeof bat === 'object') {
-        for (const k of ['percentage', 'percent', 'level', 'charge', 'value']) {
+    if (bat && typeof bat === "object") {
+        for (const k of ["percentage", "percent", "level", "charge", "value"]) {
             const parsed = parsePercentValue(bat[k]);
             if (parsed !== undefined) {
                 batPct = parsed;
                 break;
             }
         }
-        const statusStr = String(bat.status ?? '').toLowerCase();
+        const statusStr = String(bat.status ?? "").toLowerCase();
         if (
-            ['low', 'critical', 'warning', 'replace', '1'].includes(statusStr)
+            ["low", "critical", "warning", "replace", "1"].includes(statusStr)
         ) {
             batWarn = 1;
         }
@@ -239,11 +239,11 @@ function parseBattery(s, d) {
     // 2. Check root attributes (Gen 2/3 variants)
     if (batPct === undefined) {
         for (const k of [
-            'batteryPercentage',
-            'batteryPercent',
-            'battery_percent',
-            'batteryLevel',
-            'battery_level',
+            "batteryPercentage",
+            "batteryPercent",
+            "battery_percent",
+            "batteryLevel",
+            "battery_level",
         ]) {
             const parsed = parsePercentValue(d[k]);
             if (parsed !== undefined) {
@@ -271,7 +271,7 @@ function parseBattery(s, d) {
     if (
         d.batteryStatus !== undefined &&
         d.batteryStatus !== null &&
-        d.batteryStatus !== ''
+        d.batteryStatus !== ""
     ) {
         const st = Number(d.batteryStatus);
         if (st === 1) {
@@ -285,7 +285,7 @@ function parseBattery(s, d) {
         } else if (st === 3 || st === 4) {
             if (batPct === undefined) batPct = 100;
         } else if (
-            ['low', 'critical', 'warning'].includes(
+            ["low", "critical", "warning"].includes(
                 String(d.batteryStatus).toLowerCase(),
             )
         ) {
@@ -319,38 +319,38 @@ function report(s, d) {
     if (cap !== 5 && numeric(p.primary)) {
         const value = pct(Number(p.primary) * 100);
         if (value !== undefined)
-            emit(s, 'position', Math.round(cap === 6 ? value : 100 - value));
+            emit(s, "position", Math.round(cap === 6 ? value : 100 - value));
     }
     const tilt = cap === 5 ? (p.tilt ?? p.primary) : p.tilt;
     if ([1, 2, 4, 5, 9, 10].includes(cap) && numeric(tilt)) {
         const value = pct((Number(tilt) / tiltMax(s, d)) * 100);
-        if (value !== undefined) emit(s, 'slats', Math.round(value));
+        if (value !== undefined) emit(s, "slats", Math.round(value));
     }
     const { battery, warning } = parseBattery(s, d);
-    if (battery !== undefined) emit(s, 'battery', battery);
-    if (warning !== undefined) emit(s, 'batteryWarning', warning);
+    if (battery !== undefined) emit(s, "battery", battery);
+    if (warning !== undefined) emit(s, "batteryWarning", warning);
     // Gen 3 reports RSSI in dBm; legacy signalStrength uses a percentage scale.
     if (
         s.version === 3 &&
-        typeof d.signalStrength === 'number' &&
+        typeof d.signalStrength === "number" &&
         Number.isFinite(d.signalStrength) &&
         d.signalStrength < 0
     )
-        emit(s, 'signalStrength', d.signalStrength);
+        emit(s, "signalStrength", d.signalStrength);
     // Only explicit feedback is a measured motion state. positions.velocity is a
     // configured speed, and motion can be a command: neither proves motor activity.
     const moving = bit(d.isMoving);
     if (moving !== undefined) {
         clearTimeout(s.motionTimer);
-        emit(s, 'moving', moving);
+        emit(s, "moving", moving);
     }
 }
 async function refresh(s, force = false) {
     await detect(s);
     if (!s.cfg.deviceId && !s.cfg.deviceName) {
         list(
-            await request(s, 'GET', base(s) + '/shades'),
-            'shadeData',
+            await request(s, "GET", base(s) + "/shades"),
+            "shadeData",
             s.version,
         );
         connected(s, 1);
@@ -358,20 +358,20 @@ async function refresh(s, force = false) {
     }
     if (!s.device) {
         const devices = list(
-            await request(s, 'GET', base(s) + '/shades'),
-            'shadeData',
+            await request(s, "GET", base(s) + "/shades"),
+            "shadeData",
             s.version,
         );
-        s.device = select(devices, s.cfg.deviceId, s.cfg.deviceName, 'Gerät');
+        s.device = select(devices, s.cfg.deviceId, s.cfg.deviceName, "Gerät");
     }
     const raw = await request(
         s,
-        'GET',
-        `${base(s)}/shades/${encodeURIComponent(s.device.id)}${force ? '?refresh=true' : ''}`,
+        "GET",
+        `${base(s)}/shades/${encodeURIComponent(s.device.id)}${force ? "?refresh=true" : ""}`,
     );
     const d = s.version === 3 ? raw : raw?.shade;
     if (!d || String(d.id) !== String(s.device.id))
-        throw new Error('Ungültiger PowerView-Gerätestatus');
+        throw new Error("Ungültiger PowerView-Gerätestatus");
     if (s.disposed) return;
     s.device = d;
     connected(s, 1);
@@ -380,10 +380,10 @@ async function refresh(s, force = false) {
 function estimateMotion(s, moving) {
     if (!s.cfg.travelSeconds) return;
     clearTimeout(s.motionTimer);
-    emit(s, 'moving', moving);
+    emit(s, "moving", moving);
     if (moving) {
         s.motionTimer = setTimeout(
-            () => emit(s, 'moving', 0),
+            () => emit(s, "moving", 0),
             s.cfg.travelSeconds * 1000,
         );
         s.motionTimer.unref?.();
@@ -404,32 +404,32 @@ function encodePositions(version, targets) {
 }
 async function stopShade(s) {
     if (s.version === 1)
-        throw new Error('Stop wird von PowerView Gen 1 nicht unterstützt');
+        throw new Error("Stop wird von PowerView Gen 1 nicht unterstützt");
     const id = encodeURIComponent(s.device.id);
     await request(
         s,
-        'PUT',
+        "PUT",
         s.version === 3 ? `/home/shades/stop?ids=${id}` : `/api/shades/${id}`,
-        s.version === 3 ? undefined : { shade: { motion: 'stop' } },
+        s.version === 3 ? undefined : { shade: { motion: "stop" } },
     );
     estimateMotion(s, 0);
 }
 async function command(s, handle, value) {
     await detect(s);
-    if (handle === 'scene') {
-        const selector = String(value ?? '').trim();
-        if (!selector) throw new Error('Szenen-ID oder Name fehlt');
+    if (handle === "scene") {
+        const selector = String(value ?? "").trim();
+        if (!selector) throw new Error("Szenen-ID oder Name fehlt");
         const scenes = list(
-            await request(s, 'GET', base(s) + '/scenes'),
-            'sceneData',
+            await request(s, "GET", base(s) + "/scenes"),
+            "sceneData",
             s.version,
         );
         const byId = scenes.filter((d) => String(d.id) === selector);
         const scene =
-            byId.length === 1 ? byId[0] : select(scenes, '', selector, 'Szene');
+            byId.length === 1 ? byId[0] : select(scenes, "", selector, "Szene");
         await request(
             s,
-            s.version === 3 ? 'PUT' : 'GET',
+            s.version === 3 ? "PUT" : "GET",
             s.version === 3
                 ? `/home/scenes/${encodeURIComponent(scene.id)}/activate`
                 : `/api/scenes?sceneId=${encodeURIComponent(scene.id)}`,
@@ -439,35 +439,35 @@ async function command(s, handle, value) {
         return;
     }
     if (!s.cfg.deviceId && !s.cfg.deviceName)
-        throw new Error('Gerätename oder Geräte-ID fehlt');
+        throw new Error("Gerätename oder Geräte-ID fehlt");
     if (!s.device) await refresh(s);
     const d = s.device,
         id = encodeURIComponent(d.id),
         cap = capability(d);
-    if (handle === 'stop') {
+    if (handle === "stop") {
         await stopShade(s);
     } else {
         const p = axes(s, d);
-        const tilt = handle === 'slats';
+        const tilt = handle === "slats";
         if (tilt && ![1, 2, 4, 5, 9, 10].includes(cap))
             throw new Error(
-                'Gerät unterstützt keine bekannte Lamellensteuerung',
+                "Gerät unterstützt keine bekannte Lamellensteuerung",
             );
         if (!tilt && cap === 5)
-            throw new Error('Gerät unterstützt nur Lamellensteuerung');
-        if (handle === 'upDown' && bit(value) === undefined)
-            throw new Error('Auf/Ab erwartet 0 oder 1');
+            throw new Error("Gerät unterstützt nur Lamellensteuerung");
+        if (handle === "upDown" && bit(value) === undefined)
+            throw new Error("Auf/Ab erwartet 0 oder 1");
         const position =
-            handle === 'open'
+            handle === "open"
                 ? 0
-                : handle === 'close'
+                : handle === "close"
                   ? 100
-                  : handle === 'upDown'
+                  : handle === "upDown"
                     ? bit(value) * 100
                     : pct(value);
         if (position === undefined)
-            throw new Error('Position muss zwischen 0 und 100 % liegen');
-        const axis = tilt ? 'tilt' : 'primary';
+            throw new Error("Position muss zwischen 0 und 100 % liegen");
+        const axis = tilt ? "tilt" : "primary";
         const target = tilt
             ? (position / 100) * tiltMax(s, d)
             : (cap === 6 ? position : 100 - position) / 100;
@@ -477,7 +477,7 @@ async function command(s, handle, value) {
             (!numeric(p.primary) || Number(p.primary) > 0.001)
         )
             throw new Error(
-                'Lamellen können bei diesem Gerät erst im geschlossenen Zustand verstellt werden',
+                "Lamellen können bei diesem Gerät erst im geschlossenen Zustand verstellt werden",
             );
         if (
             tilt &&
@@ -485,11 +485,11 @@ async function command(s, handle, value) {
             (!numeric(p.secondary) || Number(p.secondary) < 0.999)
         ) {
             throw new Error(
-                'Lamellen benötigen bei Duolite einen geöffneten hinteren Behang',
+                "Lamellen benötigen bei Duolite einen geöffneten hinteren Behang",
             );
         }
         const targets = { [axis]: target };
-        const travelCommand = ['open', 'close', 'upDown'].includes(handle);
+        const travelCommand = ["open", "close", "upDown"].includes(handle);
         if (travelCommand && cap === 7) targets.secondary = 0;
         if (travelCommand && [8, 9, 10, 11].includes(cap) && position === 100) {
             delete targets.primary;
@@ -505,7 +505,7 @@ async function command(s, handle, value) {
         if (s.version !== 1) await stopShade(s);
         await request(
             s,
-            'PUT',
+            "PUT",
             s.version === 3
                 ? `/home/shades/positions?ids=${id}`
                 : `/api/shades/${id}`,
@@ -541,33 +541,33 @@ function dispose(s) {
 }
 async function listDevices(values, context) {
     const pick = (key) =>
-        values[key] != null && String(values[key]).trim() !== ''
+        values[key] != null && String(values[key]).trim() !== ""
             ? values[key]
             : context.globalSetting?.(key);
-    const ip = String(pick('ip') ?? '').trim();
-    const portValue = pick('port');
-    const port = portValue == null || portValue === '' ? 80 : Number(portValue);
+    const ip = String(pick("ip") ?? "").trim();
+    const portValue = pick("port");
+    const port = portValue == null || portValue === "" ? 80 : Number(portValue);
     if (!ip || !Number.isInteger(port) || port < 1 || port > 65535)
-        throw new Error('PowerView: Hub-IP und gültigen Port konfigurieren');
+        throw new Error("PowerView: Hub-IP und gültigen Port konfigurieren");
     const s = {
         cfg: {
             ip,
             port,
-            apiVersion: ['1', '2', '3'].includes(String(values.apiVersion))
+            apiVersion: ["1", "2", "3"].includes(String(values.apiVersion))
                 ? String(values.apiVersion)
-                : 'auto',
+                : "auto",
         },
         requests: new Set(),
     };
     try {
         await detect(s);
         const devices = list(
-            await request(s, 'GET', base(s) + '/shades'),
-            'shadeData',
+            await request(s, "GET", base(s) + "/shades"),
+            "shadeData",
             s.version,
         ).map((device) => {
             if (!device || !numeric(device.id))
-                throw new Error('Ungültige PowerView-Liste');
+                throw new Error("Ungültige PowerView-Liste");
             return { id: String(device.id), name: name(device) };
         });
         return { devices };
@@ -576,117 +576,169 @@ async function listDevices(values, context) {
     }
 }
 module.exports = {
-    type: 'powerview',
-    category: 'Geräte',
-    label: 'PowerView',
-    color: '#f97316',
+    translations: {
+        de: {
+            connected: "Verbunden",
+            set_local_ip_auto: "Automatisch",
+            scn_number_short: "Szene",
+            powerview_signal_strength: "Signalstärke (dBm)",
+            powerview_select_device: "Gerät aus der Hub-Liste auswählen",
+            powerview_choose_device: "Gerät auswählen…",
+            powerview_current_id: "Gespeicherte ID: {{id}}",
+            powerview_loading: "Geräte werden geladen…",
+            powerview_refresh: "Geräteliste aktualisieren",
+            powerview_no_devices: "Der Hub hat keine Geräte zurückgegeben.",
+            powerview_manual_id: "Geräte-ID manuell eingeben",
+            powerview_load_failed:
+                "Geräte konnten nicht geladen werden. Prüfe Hub-IP, Port und API-Version. Die gespeicherte ID bleibt erhalten.",
+            powerview_action_label: "PowerView-Geräteliste laden",
+            powerview_id_label: "Geräte-ID (hat Vorrang)",
+            powerview_invalid_connection:
+                "PowerView: Hub-IP und gültigen Port konfigurieren",
+            powerview_invalid_list: "Ungültige PowerView-Liste",
+            common_device_category: "Geräte",
+            common_unknown_action: "Unbekannte Plugin-Aktion",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_percent: "percent",
+        },
+        en: {
+            connected: "Connected",
+            set_local_ip_auto: "Automatic",
+            scn_number_short: "Scene",
+            powerview_signal_strength: "Signal strength (dBm)",
+            powerview_select_device: "Select a device from the hub list",
+            powerview_choose_device: "Choose a device…",
+            powerview_current_id: "Saved ID: {{id}}",
+            powerview_loading: "Loading devices…",
+            powerview_refresh: "Refresh device list",
+            powerview_no_devices: "The hub returned no devices.",
+            powerview_manual_id: "Enter device ID manually",
+            powerview_load_failed:
+                "Could not load devices. Check the hub IP, port and API version. The saved ID is preserved.",
+            powerview_action_label: "Load PowerView device list",
+            powerview_id_label: "Device ID (takes precedence)",
+            powerview_invalid_connection:
+                "PowerView: Configure the hub IP and a valid port",
+            powerview_invalid_list: "Invalid PowerView list",
+            common_device_category: "Devices",
+            common_unknown_action: "Unknown plugin action",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_percent: "Percentage",
+        },
+    },
+    type: "powerview",
+    category: "Geräte",
+    label: "PowerView",
+    color: "#f97316",
     description:
-        'Lokale PowerView-Steuerung Gen 1/2/3. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Öffnen/Schliessen/Status nur bei 1; Stop bei jedem 0/1-Telegramm. Geräte-ID hat Vorrang. Fährt nur bei expliziter Rückmeldung oder aktivierter Laufzeitschätzung; Stop nicht bei Gen 1.',
+        "Lokale PowerView-Steuerung Gen 1/2/3. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Öffnen/Schliessen/Status nur bei 1; Stop bei jedem 0/1-Telegramm. Geräte-ID hat Vorrang. Fährt nur bei expliziter Rückmeldung oder aktivierter Laufzeitschätzung; Stop nicht bei Gen 1.",
     inputs: [
-        { handle: 'ip', label: 'IP Adresse' },
-        { handle: 'port', label: 'Port (Standard 80)' },
-        { handle: 'deviceName', label: 'Gerätename' },
-        { handle: 'deviceId', label: 'Geräte ID' },
-        { handle: 'upDown', label: 'Auf/Ab (0=Auf, 1=Ab)' },
-        { handle: 'open', label: 'Öffnen (1)' },
-        { handle: 'close', label: 'Schliessen (1)' },
-        { handle: 'stop', label: 'Stop (0/1)' },
-        { handle: 'position', label: 'Position (0=offen, 100=geschlossen)' },
-        { handle: 'slats', label: 'Lamellenwinkel (0–100 %)' },
-        { handle: 'scene', label: 'Szene aktivieren (ID oder Name)' },
-        { handle: 'triggerStatus', label: 'Status Trigger (1)' },
-        { handle: 'interval', label: 'Status Intervall (Sekunden)' },
+        { handle: "ip", label: "IP Adresse" },
+        { handle: "port", label: "Port (Standard 80)" },
+        { handle: "deviceName", label: "Gerätename" },
+        { handle: "deviceId", label: "Geräte ID" },
+        { handle: "upDown", label: "Auf/Ab (0=Auf, 1=Ab)" },
+        { handle: "open", label: "Öffnen (1)" },
+        { handle: "close", label: "Schliessen (1)" },
+        { handle: "stop", label: "Stop (0/1)" },
+        { handle: "position", label: "Position (0=offen, 100=geschlossen)" },
+        { handle: "slats", label: "Lamellenwinkel (0–100 %)" },
+        { handle: "scene", label: "Szene aktivieren (ID oder Name)" },
+        { handle: "triggerStatus", label: "Status Trigger (1)" },
+        { handle: "interval", label: "Status Intervall (Sekunden)" },
     ],
     outputs: [
-        { handle: 'connected', label: 'Verbindungsstatus (0/1)' },
-        { handle: 'position', label: 'Position (0=offen, 100=geschlossen)' },
-        { handle: 'slats', label: 'Lamellenwinkel (0–100 %)' },
-        { handle: 'battery', label: 'Batterie (0–100 %)' },
-        { handle: 'batteryWarning', label: 'Batteriewarnung (0/1)' },
-        { handle: 'moving', label: 'Fährt (0/1)' },
-        { handle: 'signalStrength', label: 'Signalstärke (dBm)' },
+        { handle: "connected", label: "Verbindungsstatus (0/1)" },
+        { handle: "position", label: "Position (0=offen, 100=geschlossen)" },
+        { handle: "slats", label: "Lamellenwinkel (0–100 %)" },
+        { handle: "battery", label: "Batterie (0–100 %)" },
+        { handle: "batteryWarning", label: "Batteriewarnung (0/1)" },
+        { handle: "moving", label: "Fährt (0/1)" },
+        { handle: "signalStrength", label: "Signalstärke (dBm)" },
     ],
     globalSettings: [
-        { key: 'ip', label: 'PowerView Hub IP-Adresse', type: 'text' },
+        { key: "ip", label: "PowerView Hub IP-Adresse", type: "text" },
         {
-            key: 'port',
-            label: 'Port (Standard 80)',
-            type: 'number',
-            placeholder: '80',
+            key: "port",
+            label: "Port (Standard 80)",
+            type: "number",
+            placeholder: "80",
         },
     ],
     globalActions: [
-        { key: 'listDevices', label: 'PowerView-Geräteliste laden' },
+        { key: "listDevices", label: "PowerView-Geräteliste laden" },
     ],
     async handleGlobalAction(action, values, context) {
-        if (action !== 'listDevices')
-            throw new Error('Unbekannte Plugin-Aktion');
+        if (action !== "listDevices")
+            throw new Error("Unbekannte Plugin-Aktion");
         return listDevices(values, context);
     },
     config: [
-        { key: 'deviceName', label: 'Gerätename', type: 'text' },
+        { key: "deviceName", label: "Gerätename", type: "text" },
         {
-            key: 'deviceId',
-            label: 'Geräte-ID (hat Vorrang)',
-            type: 'async-select',
+            key: "deviceId",
+            label: "Geräte-ID (hat Vorrang)",
+            type: "async-select",
             allowCustomValue: true,
             showValue: true,
             optionsSource: {
-                action: 'listDevices',
-                parameters: ['ip', 'port', 'apiVersion'],
-                resultKey: 'devices',
-                valueKey: 'id',
-                labelKey: 'name',
+                action: "listDevices",
+                parameters: ["ip", "port", "apiVersion"],
+                resultKey: "devices",
+                valueKey: "id",
+                labelKey: "name",
             },
         },
         {
-            key: 'apiVersion',
-            label: 'PowerView-API',
-            type: 'select',
+            key: "apiVersion",
+            label: "PowerView-API",
+            type: "select",
             options: [
-                { value: 'auto', label: 'Automatisch' },
-                { value: '1', label: 'Gen 1' },
-                { value: '2', label: 'Gen 2' },
-                { value: '3', label: 'Gen 3' },
+                { value: "auto", label: "Automatisch" },
+                { value: "1", label: "Gen 1" },
+                { value: "2", label: "Gen 2" },
+                { value: "3", label: "Gen 3" },
             ],
         },
         {
-            key: 'interval',
-            label: 'Statusintervall in Sekunden (Standard 10, 0=aus)',
-            type: 'number',
-            placeholder: '10',
+            key: "interval",
+            label: "Statusintervall in Sekunden (Standard 10, 0=aus)",
+            type: "number",
+            placeholder: "10",
         },
         {
-            key: 'travelSeconds',
-            label: 'Optionale Fahrstatus-Schätzung in Sekunden (0=aus)',
-            type: 'number',
-            placeholder: '0',
+            key: "travelSeconds",
+            label: "Optionale Fahrstatus-Schätzung in Sekunden (0=aus)",
+            type: "number",
+            placeholder: "0",
         },
     ],
     execute(inputs, data, context) {
-        const id = context.nodeId || 'default';
+        const id = context.nodeId || "default";
         let s = states.get(id);
         const previous = s?.inputs || context.initialInputs || {};
         const stored = { ...previous, ...inputs };
         const pick = (key) =>
-            stored[key] != null && stored[key] !== ''
+            stored[key] != null && stored[key] !== ""
                 ? stored[key]
-                : data[key] != null && data[key] !== ''
+                : data[key] != null && data[key] !== ""
                   ? data[key]
                   : context.globalSetting?.(key);
         const cfg = Object.fromEntries(
             configKeys.map((key) => [key, pick(key)]),
         );
-        for (const key of ['ip', 'deviceId', 'deviceName'])
-            cfg[key] = String(cfg[key] ?? '').trim();
-        cfg.port = cfg.port == null || cfg.port === '' ? 80 : Number(cfg.port);
+        for (const key of ["ip", "deviceId", "deviceName"])
+            cfg[key] = String(cfg[key] ?? "").trim();
+        cfg.port = cfg.port == null || cfg.port === "" ? 80 : Number(cfg.port);
         cfg.interval =
-            cfg.interval == null || cfg.interval === ''
+            cfg.interval == null || cfg.interval === ""
                 ? 10
                 : Number(cfg.interval);
-        cfg.apiVersion = ['1', '2', '3'].includes(String(data.apiVersion))
+        cfg.apiVersion = ["1", "2", "3"].includes(String(data.apiVersion))
             ? String(data.apiVersion)
-            : 'auto';
+            : "auto";
         cfg.travelSeconds = Math.max(
             0,
             Math.min(600, Number(data.travelSeconds) || 0),
@@ -718,7 +770,7 @@ module.exports = {
         ) {
             connected(s, 0);
             if (changed && cfg.ip)
-                context.warn?.('PowerView: Port oder Statusintervall ungültig');
+                context.warn?.("PowerView: Port oder Statusintervall ungültig");
             return {};
         }
         if (changed) {
@@ -752,14 +804,14 @@ module.exports = {
         for (const handle of handles) {
             const value = inputs[handle];
             // KNX/Visu stop telegrams carry the previous direction: both bits stop.
-            if (handle === 'stop' && bit(value) === undefined) continue;
+            if (handle === "stop" && bit(value) === undefined) continue;
             if (
-                ['open', 'close', 'triggerStatus'].includes(handle) &&
+                ["open", "close", "triggerStatus"].includes(handle) &&
                 bit(value) !== 1
             )
                 continue;
             enqueue(s, () =>
-                handle === 'triggerStatus'
+                handle === "triggerStatus"
                     ? refresh(s, true)
                     : command(s, handle, value),
             );

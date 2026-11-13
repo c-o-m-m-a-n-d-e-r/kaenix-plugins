@@ -1,6 +1,6 @@
 /**
  * @plugin    Sonos Player
- * @version   1.0.18
+ * @version   1.0.19
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -1109,6 +1109,58 @@ async function cmdFavorite(cfg, state, favIdentifier) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+    translations: {
+        de: {
+            carplay_stop: "Stopp",
+            connected: "Verbunden",
+            magnetar_pause: "Pause (Trigger)",
+            lyngdorf_ip: "IP-Adresse",
+            lyngdorf_refresh: "Status abfragen (Trigger)",
+            lyngdorf_mute: "Stumm (0/1)",
+            lyngdorf_volume_down: "Leiser (Trigger)",
+            lyngdorf_volume_up: "Lauter (Trigger)",
+            lyngdorf_volume_output: "Lautstärke (0–100 %)",
+            lyngdorf_volume_input: "Lautstärke (0–100 %)",
+            ui_preset: "preset",
+            ui_play: "Play",
+            ui_stopp: "Stopp",
+            ui_vorwarts: "Vorwärts",
+            ui_verwaltet: " verwaltet",
+            ui_stop_713: "Stop",
+            ui_pause: "Pause",
+            common_device_category: "Geräte",
+            logic_result: "Ergebnis",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            ui_audit_favoriten: "Favoriten",
+        },
+        en: {
+            carplay_stop: "Stop",
+            connected: "Connected",
+            magnetar_pause: "Pause (trigger)",
+            lyngdorf_ip: "IP address",
+            lyngdorf_refresh: "Query status (trigger)",
+            lyngdorf_mute: "Mute (0/1)",
+            lyngdorf_volume_down: "Volume down (trigger)",
+            lyngdorf_volume_up: "Volume up (trigger)",
+            lyngdorf_volume_output: "Volume (0–100 %)",
+            lyngdorf_volume_input: "Volume (0–100 %)",
+            ui_preset: "preset",
+            ui_play: "Play",
+            ui_stopp: "Stop",
+            ui_vorwarts: "Next",
+            ui_verwaltet: " ",
+            ui_stop_713: "Stop",
+            ui_pause: "Pause",
+            common_device_category: "Devices",
+            logic_result: "Result",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            ui_audit_favoriten: "Favorites",
+        },
+    },
     dispose(nodeId) {
         const ids = nodeId == null ? [..._states.keys()] : [nodeId];
         for (const id of ids) {

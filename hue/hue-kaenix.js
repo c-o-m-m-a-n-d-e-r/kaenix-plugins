@@ -1,6 +1,6 @@
 /**
  * @plugin    Philips Hue
- * @version   1.0.12
+ * @version   1.0.13
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -508,6 +508,30 @@ async function cmdDim(cfg, state, val) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            lyngdorf_refresh: "Status abfragen (Trigger)",
+            ui_restart_no: "Nein",
+            ui_restart_yes: "Ja",
+            ui_port: "Port",
+            ui_deaktiviert: "Deaktiviert",
+            common_device_category: "Geräte",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+        },
+        en: {
+            connected: "Connected",
+            lyngdorf_refresh: "Query status (trigger)",
+            ui_restart_no: "No",
+            ui_restart_yes: "Yes",
+            ui_port: "Port",
+            ui_deaktiviert: "Disabled",
+            common_device_category: "Devices",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+        },
+    },
     type: "philips-hue",
     category: "Geräte",
     label: "Philips Hue",

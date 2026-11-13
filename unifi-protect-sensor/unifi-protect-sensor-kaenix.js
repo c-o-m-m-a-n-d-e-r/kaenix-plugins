@@ -1,6 +1,6 @@
 /**
  * @plugin    UniFi Protect Sensor Trigger
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -45,6 +45,20 @@ function triggerSensor(host, port, apiKey, triggerId) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            carplay_trigger: "Auslösen",
+            ui_auslosen: "Auslösen",
+            ui_port: "Port",
+            logic_convert_number: "number",
+        },
+        en: {
+            carplay_trigger: "Trigger",
+            ui_auslosen: "Trigger",
+            ui_port: "Port",
+            logic_convert_number: "Number",
+        },
+    },
     type: "unifi-protect-sensor",
     category: "UniFi",
     label: "UniFi Protect Alarm Trigger",

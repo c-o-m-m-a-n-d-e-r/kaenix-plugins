@@ -1,11 +1,49 @@
 /**
  * @plugin    CallMeBot
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
  */
 module.exports = {
+    translations: {
+        de: {
+            carplay_trigger: "Auslösen",
+            native_value: "Wert",
+            sch_widget_value: "Wert",
+            dash_col_value: "Wert",
+            addr_value_placeholder: "Wert",
+            sch_trigger_type: "Auslöser",
+            sch_col_value: "Wert",
+            scn_trigger: "Trigger",
+            scn_action_value: "Wert",
+            queue_status: "Status",
+            ui_status: "Status",
+            ui_in_57: "in",
+            ui_auslosen: "Auslösen",
+            hvac_value: "Wert",
+            history_value_axis: "Wert",
+            leica_status: "Status",
+        },
+        en: {
+            carplay_trigger: "Trigger",
+            native_value: "Value",
+            sch_widget_value: "Value",
+            dash_col_value: "Value",
+            addr_value_placeholder: "Value",
+            sch_trigger_type: "Trigger",
+            sch_col_value: "Value",
+            scn_trigger: "Trigger",
+            scn_action_value: "Value",
+            queue_status: "Status",
+            ui_status: "Status",
+            ui_in_57: "in",
+            ui_auslosen: "Trigger",
+            hvac_value: "Value",
+            history_value_axis: "Value",
+            leica_status: "Status",
+        },
+    },
     type: "callmebot",
     category: "Benachrichtigung",
     label: "CallMeBot",

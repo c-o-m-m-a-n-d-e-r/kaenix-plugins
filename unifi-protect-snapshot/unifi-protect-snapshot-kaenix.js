@@ -1,6 +1,6 @@
 /**
  * @plugin    UniFi Protect Snapshot
- * @version   1.2.1
+ * @version   1.2.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -142,6 +142,28 @@ async function fetchLastEventClip(host, port, token, csrf, cameraId) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            carplay_trigger: "Auslösen",
+            addr_pw_label: "Passwort",
+            native_auth_username: "Benutzername",
+            native_auth_password: "Passwort",
+            ui_auslosen: "Auslösen",
+            ui_benutzername: "Benutzername",
+            ui_port: "Port",
+            logic_convert_number: "number",
+        },
+        en: {
+            carplay_trigger: "Trigger",
+            addr_pw_label: "Password",
+            native_auth_username: "Username",
+            native_auth_password: "Password",
+            ui_auslosen: "Trigger",
+            ui_benutzername: "Username",
+            ui_port: "Port",
+            logic_convert_number: "Number",
+        },
+    },
     type: "unifi-protect-snapshot",
     category: "UniFi",
     label: "UniFi Protect Snapshot",

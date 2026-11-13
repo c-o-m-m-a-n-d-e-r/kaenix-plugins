@@ -1,6 +1,6 @@
 /**
  * @plugin    Naim Audio Player
- * @version   1.0.12
+ * @version   1.0.13
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  */
@@ -1081,6 +1081,46 @@ async function cmdRepeat(cfg, state, val) {
 // ── Plugin-Export ──────────────────────────────────────────────────────────────
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            magnetar_pause: "Pause (Trigger)",
+            lyngdorf_ip: "IP-Adresse",
+            lyngdorf_refresh: "Status abfragen (Trigger)",
+            lyngdorf_mute: "Stumm (0/1)",
+            lyngdorf_volume_down: "Leiser (Trigger)",
+            lyngdorf_volume_up: "Lauter (Trigger)",
+            lyngdorf_volume_output: "Lautstärke (0–100 %)",
+            lyngdorf_volume_input: "Lautstärke (0–100 %)",
+            ui_preset: "preset",
+            ui_play: "Play",
+            ui_verwaltet: " verwaltet",
+            common_device_category: "Geräte",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            ui_audit_favoriten: "Favoriten",
+        },
+        en: {
+            connected: "Connected",
+            magnetar_pause: "Pause (trigger)",
+            lyngdorf_ip: "IP address",
+            lyngdorf_refresh: "Query status (trigger)",
+            lyngdorf_mute: "Mute (0/1)",
+            lyngdorf_volume_down: "Volume down (trigger)",
+            lyngdorf_volume_up: "Volume up (trigger)",
+            lyngdorf_volume_output: "Volume (0–100 %)",
+            lyngdorf_volume_input: "Volume (0–100 %)",
+            ui_preset: "preset",
+            ui_play: "Play",
+            ui_verwaltet: " ",
+            common_device_category: "Devices",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            ui_audit_favoriten: "Favorites",
+        },
+    },
     dispose(nodeId) {
         for (const id of nodeId == null ? [..._states.keys()] : [nodeId]) {
             const state = _states.get(id);

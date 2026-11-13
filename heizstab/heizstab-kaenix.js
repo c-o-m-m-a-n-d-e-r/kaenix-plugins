@@ -1,6 +1,6 @@
 /**
  * @plugin    Heizstab
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -47,6 +47,30 @@ function toNum(val, fallback) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            native_active: "Aktiv",
+            logic_active: "Aktiv",
+            icon_manager_enabled: "Aktiv",
+            sch_col_active: "Aktiv",
+            ui_restart_no: "Nein",
+            ui_restart_yes: "Ja",
+            ui_debug: "Debug",
+            ui_energie: "Energie",
+            logic_convert_number: "number",
+        },
+        en: {
+            native_active: "Active",
+            logic_active: "Active",
+            icon_manager_enabled: "Enabled",
+            sch_col_active: "Active",
+            ui_restart_no: "No",
+            ui_restart_yes: "Yes",
+            ui_debug: "Debug",
+            ui_energie: "Energy",
+            logic_convert_number: "Number",
+        },
+    },
     type: "heizstab",
     category: "Energie",
     label: "Heizstab",

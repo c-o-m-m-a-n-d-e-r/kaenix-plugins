@@ -1,6 +1,6 @@
 /**
  * @plugin Zentral
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  */
 const schemas = {
@@ -221,6 +221,121 @@ function presetFields() {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            central_title: "Zentral",
+            central_description:
+                "Steuert ausgewählte Widgets einer Kategorie gemeinsam und fasst deren Rückmeldungen zusammen.",
+            central_presets_description:
+                "Steuert ausgewählte Widgets einer Kategorie gemeinsam und fasst deren Rückmeldungen zusammen. Eingabefelder sind optionale Vorgaben. Beim Einschalten (Schalten, Power oder Play = 1) werden vorbelegte Parameter mitgesendet; empfangene Eingangswerte haben Vorrang. Leere Felder bleiben unberücksichtigt.",
+            central_preset_color:
+                'Farbe (RGB-JSON, z. B. {"red":255,"green":0,"blue":0})',
+            central_category: "Widgetkategorie",
+            central_widgets: "Widgets",
+            central_widget_search: "Widgets nach Name oder Seite suchen …",
+            central_widget_search_empty: "Keine passenden Widgets gefunden.",
+            central_blinds: "Jalousien",
+            central_choose_category:
+                "Bitte zuerst eine Widgetkategorie wählen.",
+            central_load_error: "Widgets konnten nicht geladen werden.",
+            central_no_widgets: "Keine Widgets in dieser Kategorie vorhanden.",
+            central_feedback_hint:
+                "Status: mindestens eines aktiv. Zahlen: Mittelwert. Andere Werte: nur bei Übereinstimmung.",
+            central_invalid_value:
+                "Ungültiger Eingangswert für die Gruppenadresse {{address}}",
+            sch_widget_value: "Wert",
+            scn_number_short: "Szene",
+            ui_helligkeit: "Helligkeit",
+            ui_temperatur: "Temperatur",
+            ui_power_ein_aus: "Power Ein/Aus",
+            ui_stopp: "Stopp",
+            ui_schalter: "Schalter",
+            ui_dimmer: "Dimmer",
+            ui_messwert: "Messwert",
+            ui_wertgeber: "Wertgeber",
+            ui_taster: "Taster",
+            ui_colorpicker: "Colorpicker",
+            ui_musik_player: "Musik-Player",
+            ui_text: "Text",
+            ui_status_icon: "Status-Icon",
+            ui_menu_link: "Menü-Link",
+            ui_schalten: "Schalten",
+            ui_sollwert_setzen: "Sollwert setzen",
+            ui_hvac_modus_setzen: "HVAC-Modus setzen",
+            ui_fahren_auf_ab: "Fahren Auf/Ab",
+            ui_position_setzen: "Position setzen",
+            ui_lamellen_setzen: "Lamellen setzen",
+            ui_farbtemperatur_setzen: "Farbtemperatur setzen",
+            ui_farbe_setzen: "Farbe setzen",
+            ui_play_pause: "Play / Pause",
+            ui_nachster_titel_vorwarts: "Nächster Titel (Vorwärts)",
+            ui_vorheriger_titel_zuruck: "Vorheriger Titel (Zurück)",
+            ui_lautstarke_setzen: "Lautstärke setzen",
+            ui_stummschaltung_mute: "Stummschaltung (Mute)",
+            ui_szene_aufrufen: "Szene aufrufen",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            climate_title: "Klima",
+            climate_mode_command: "HVAC-Modus setzen",
+            climate_power_command: "Ein/Aus schalten",
+        },
+        en: {
+            central_title: "Central",
+            central_description:
+                "Controls selected widgets of one category together and aggregates their feedback.",
+            central_presets_description:
+                "Controls selected widgets of one category together and aggregates their feedback. Input fields are optional presets. Switching on (switch, power or play = 1) also sends preset parameters; received input values take precedence. Empty fields are ignored.",
+            central_preset_color:
+                'Color (RGB JSON, e.g. {"red":255,"green":0,"blue":0})',
+            central_category: "Widget category",
+            central_widgets: "Widgets",
+            central_widget_search: "Search widgets by name or page …",
+            central_widget_search_empty: "No matching widgets found.",
+            central_blinds: "Blinds",
+            central_choose_category: "Choose a widget category first.",
+            central_load_error: "Could not load widgets.",
+            central_no_widgets: "No widgets in this category.",
+            central_feedback_hint:
+                "Status: any active. Numbers: average. Other values: only when matching.",
+            central_invalid_value:
+                "Invalid input value for the group address {{address}}",
+            sch_widget_value: "Value",
+            scn_number_short: "Scene",
+            ui_helligkeit: "Brightness",
+            ui_temperatur: "Temperature",
+            ui_power_ein_aus: "Power on/off",
+            ui_stopp: "Stop",
+            ui_schalter: "Switch",
+            ui_dimmer: "Dimmer",
+            ui_messwert: "Measurement",
+            ui_wertgeber: "Value control",
+            ui_taster: "Button",
+            ui_colorpicker: "Color picker",
+            ui_musik_player: "Music player",
+            ui_text: "Text",
+            ui_status_icon: "Status icon",
+            ui_menu_link: "Menu link",
+            ui_schalten: "Switching",
+            ui_sollwert_setzen: "Set setpoint",
+            ui_hvac_modus_setzen: "Set HVAC mode",
+            ui_fahren_auf_ab: "Move up/down",
+            ui_position_setzen: "Set position",
+            ui_lamellen_setzen: "Set slats",
+            ui_farbtemperatur_setzen: "Set color temperature",
+            ui_farbe_setzen: "Set color",
+            ui_play_pause: "Play / pause",
+            ui_nachster_titel_vorwarts: "Next track",
+            ui_vorheriger_titel_zuruck: "Previous track",
+            ui_lautstarke_setzen: "Set volume",
+            ui_stummschaltung_mute: "Mute",
+            ui_szene_aufrufen: "Run scene",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            climate_title: "Climate",
+            climate_mode_command: "Set HVAC mode",
+            climate_power_command: "Switch on/off",
+        },
+    },
     type: "zentral",
     category: "Automatisierung",
     label: "Zentral",

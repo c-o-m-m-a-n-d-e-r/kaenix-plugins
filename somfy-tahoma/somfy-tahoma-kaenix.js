@@ -1,16 +1,16 @@
 /**
  * @plugin    Somfy Tahoma
- * @version   1.0.3
+ * @version   1.0.4
  * @author    Christian Brauwers
  * @website   https://www.kaenix.net
  * Local API: https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode
  */
-'use strict';
-const https = require('https');
-const net = require('net');
-const tls = require('tls');
+"use strict";
+const https = require("https");
+const net = require("net");
+const tls = require("tls");
 const states = new Map();
-const BASE = '/enduser-mobile-web/1/enduserAPI';
+const BASE = "/enduser-mobile-web/1/enduserAPI";
 // Public CA from https://ca.overkiz.com/overkiz-root-ca-2048.crt (not a private key).
 const CA = `-----BEGIN CERTIFICATE-----
 MIIDPDCCAiSgAwIBAgIJAOvswclbF4QnMA0GCSqGSIb3DQEBCwUAMEsxEDAOBgNV
@@ -35,7 +35,7 @@ QLMnmaF+oFW5mnhh9gu6Gg==
 
 function request(state, method, path, body) {
     return new Promise((resolve, reject) => {
-        if (state.disposed) return reject(new Error('Node gestoppt'));
+        if (state.disposed) return reject(new Error("Node gestoppt"));
         const payload = body == null ? null : JSON.stringify(body);
         const req = https.request(
             {
@@ -58,57 +58,57 @@ function request(state, method, path, body) {
                           : tls.checkServerIdentity(host, cert),
                 headers: {
                     Authorization: `Bearer ${state.cfg.token}`,
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                     ...(payload
-                        ? { 'Content-Length': Buffer.byteLength(payload) }
+                        ? { "Content-Length": Buffer.byteLength(payload) }
                         : {}),
                 },
                 timeout: 8000,
             },
             (res) => {
-                let raw = '';
-                res.on('error', reject);
-                res.on('aborted', () =>
-                    reject(new Error('TaHoma-Antwort abgebrochen')),
+                let raw = "";
+                res.on("error", reject);
+                res.on("aborted", () =>
+                    reject(new Error("TaHoma-Antwort abgebrochen")),
                 );
-                res.on('data', (chunk) => {
+                res.on("data", (chunk) => {
                     raw += chunk;
                     if (raw.length > 4 * 1024 * 1024)
-                        req.destroy(new Error('TaHoma-Antwort zu groß'));
+                        req.destroy(new Error("TaHoma-Antwort zu groß"));
                 });
-                res.on('end', () => {
+                res.on("end", () => {
                     if (res.statusCode < 200 || res.statusCode >= 300) {
                         return reject(
                             new Error(
-                                `TaHoma HTTP ${res.statusCode}${res.statusCode === 401 ? ' – Token prüfen' : ''}`,
+                                `TaHoma HTTP ${res.statusCode}${res.statusCode === 401 ? " – Token prüfen" : ""}`,
                             ),
                         );
                     }
                     try {
                         resolve(raw ? JSON.parse(raw) : null);
                     } catch {
-                        reject(new Error('Ungültige TaHoma-JSON-Antwort'));
+                        reject(new Error("Ungültige TaHoma-JSON-Antwort"));
                     }
                 });
             },
         );
         state.requests.add(req);
-        req.on('close', () => state.requests.delete(req));
-        req.on('error', reject);
-        req.on('timeout', () =>
-            req.destroy(new Error('TaHoma Zeitüberschreitung')),
+        req.on("close", () => state.requests.delete(req));
+        req.on("error", reject);
+        req.on("timeout", () =>
+            req.destroy(new Error("TaHoma Zeitüberschreitung")),
         );
         req.end(payload);
     });
 }
 
 function bit(value) {
-    if ([true, 1, '1', 'true', 'on'].includes(value)) return 1;
-    if ([false, 0, '0', 'false', 'off'].includes(value)) return 0;
+    if ([true, 1, "1", "true", "on"].includes(value)) return 1;
+    if ([false, 0, "0", "false", "off"].includes(value)) return 0;
     return undefined;
 }
 function percent(value) {
-    if (value == null || value === '' || typeof value === 'boolean')
+    if (value == null || value === "" || typeof value === "boolean")
         return undefined;
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n) : undefined;
@@ -127,41 +127,41 @@ function report(state, values) {
     const data = Object.fromEntries(
         (values || []).map((s) => [s.name, s.value]),
     );
-    emit(state, 'status', bit(data['core:OnOffState']));
-    emit(state, 'brightness', percent(data['core:LightIntensityState']));
-    emit(state, 'position', percent(data['core:ClosureState']));
-    emit(state, 'slats', percent(data['core:SlateOrientationState']));
-    emit(state, 'moving', bit(data['core:MovingState']));
+    emit(state, "status", bit(data["core:OnOffState"]));
+    emit(state, "brightness", percent(data["core:LightIntensityState"]));
+    emit(state, "position", percent(data["core:ClosureState"]));
+    emit(state, "slats", percent(data["core:SlateOrientationState"]));
+    emit(state, "moving", bit(data["core:MovingState"]));
 }
 async function readDevices(state) {
-    const devices = await request(state, 'GET', '/setup/devices');
+    const devices = await request(state, "GET", "/setup/devices");
     if (
         !Array.isArray(devices) ||
         devices.some(
             (device) =>
                 !device ||
-                typeof device.deviceURL !== 'string' ||
+                typeof device.deviceURL !== "string" ||
                 !device.deviceURL.trim(),
         )
     ) {
-        throw new Error('Ungültige TaHoma-Geräteliste');
+        throw new Error("Ungültige TaHoma-Geräteliste");
     }
     return devices;
 }
 async function listDevices(values, context) {
     const cfg = Object.fromEntries(
-        ['ip', 'token', 'gatewayPin'].map((key) => [
+        ["ip", "token", "gatewayPin"].map((key) => [
             key,
             String(
-                values[key] != null && String(values[key]).trim() !== ''
+                values[key] != null && String(values[key]).trim() !== ""
                     ? values[key]
-                    : (context.globalSetting?.(key) ?? ''),
+                    : (context.globalSetting?.(key) ?? ""),
             ).trim(),
         ]),
     );
     if (!cfg.ip || !cfg.token)
         throw new Error(
-            'TaHoma: IP-Adresse und Developer-Mode Token konfigurieren',
+            "TaHoma: IP-Adresse und Developer-Mode Token konfigurieren",
         );
     const state = { cfg, requests: new Set() };
     try {
@@ -169,7 +169,7 @@ async function listDevices(values, context) {
         return {
             devices: devices.map((device) => ({
                 id: device.deviceURL,
-                name: typeof device.label === 'string' ? device.label : '',
+                name: typeof device.label === "string" ? device.label : "",
             })),
         };
     } finally {
@@ -187,10 +187,10 @@ async function device(state) {
     if (matches.length !== 1)
         throw new Error(
             matches.length
-                ? 'Gerätename ist nicht eindeutig – vollständige Geräte-ID verwenden'
-                : 'TaHoma-Gerät nicht gefunden – Namen oder vollständige Geräte-ID prüfen',
+                ? "Gerätename ist nicht eindeutig – vollständige Geräte-ID verwenden"
+                : "TaHoma-Gerät nicht gefunden – Namen oder vollständige Geräte-ID prüfen",
         );
-    if (state.disposed) throw new Error('Node gestoppt');
+    if (state.disposed) throw new Error("Node gestoppt");
     state.device = matches[0];
     state.context.setNodeStatus?.(true);
     report(state, state.device.states);
@@ -200,12 +200,12 @@ async function refresh(state) {
     const d = await device(state);
     const values = await request(
         state,
-        'GET',
+        "GET",
         `/setup/devices/${encodeURIComponent(d.deviceURL)}/states`,
     );
     if (state.disposed) return;
     if (!Array.isArray(values))
-        throw new Error('Ungültige TaHoma-Statusantwort');
+        throw new Error("Ungültige TaHoma-Statusantwort");
     d.states = values;
     report(state, values);
     state.context.setNodeStatus?.(true);
@@ -221,62 +221,62 @@ async function command(state, handle, value) {
     let names,
         parameters = [];
     switch (handle) {
-        case 'switch':
+        case "switch":
             if (bit(value) === undefined)
-                throw new Error('Schalten erwartet 0 oder 1');
-            names = [bit(value) ? 'on' : 'off'];
+                throw new Error("Schalten erwartet 0 oder 1");
+            names = [bit(value) ? "on" : "off"];
             break;
-        case 'toggle':
+        case "toggle":
             if (bit(value) === undefined)
-                throw new Error('Toggle erwartet 0 oder 1');
-            if (supported('toggle', 0)) names = ['toggle'];
+                throw new Error("Toggle erwartet 0 oder 1");
+            if (supported("toggle", 0)) names = ["toggle"];
             else {
                 await refresh(state);
                 const current = bit(
-                    d.states.find((s) => s.name === 'core:OnOffState')?.value,
+                    d.states.find((s) => s.name === "core:OnOffState")?.value,
                 );
                 if (current === undefined)
                     throw new Error(
-                        'Toggle benötigt einen Ein/Aus-Status oder den Gerätebefehl toggle',
+                        "Toggle benötigt einen Ein/Aus-Status oder den Gerätebefehl toggle",
                     );
-                names = [current ? 'off' : 'on'];
+                names = [current ? "off" : "on"];
             }
             break;
-        case 'brightness':
-            names = ['setIntensity'];
+        case "brightness":
+            names = ["setIntensity"];
             parameters = [percent(value)];
             break;
-        case 'position':
-            names = ['setClosure'];
+        case "position":
+            names = ["setClosure"];
             parameters = [percent(value)];
             break;
-        case 'slats':
-            names = ['setOrientation'];
+        case "slats":
+            names = ["setOrientation"];
             parameters = [percent(value)];
             break;
-        case 'open':
-            names = ['open', 'up'];
+        case "open":
+            names = ["open", "up"];
             break;
-        case 'close':
-            names = ['close', 'down'];
+        case "close":
+            names = ["close", "down"];
             break;
-        case 'upDown':
+        case "upDown":
             if (bit(value) === undefined)
-                throw new Error('Auf/Ab erwartet 0 oder 1');
-            names = bit(value) ? ['close', 'down'] : ['open', 'up'];
+                throw new Error("Auf/Ab erwartet 0 oder 1");
+            names = bit(value) ? ["close", "down"] : ["open", "up"];
             break;
-        case 'stop':
-            names = ['stop'];
+        case "stop":
+            names = ["stop"];
             break;
         default:
             return;
     }
     if (parameters.includes(undefined))
-        throw new Error('Wert muss zwischen 0 und 100 % liegen');
+        throw new Error("Wert muss zwischen 0 und 100 % liegen");
     const name = names.find((n) => supported(n, parameters.length));
-    if (!name) throw new Error(`Gerät unterstützt ${names.join('/')} nicht`);
-    await request(state, 'POST', '/exec/apply', {
-        label: 'kaenix Somfy Tahoma',
+    if (!name) throw new Error(`Gerät unterstützt ${names.join("/")} nicht`);
+    await request(state, "POST", "/exec/apply", {
+        label: "kaenix Somfy Tahoma",
         actions: [{ deviceURL: d.deviceURL, commands: [{ name, parameters }] }],
     });
     // Do not invent feedback: execution acceptance is not physical completion.
@@ -291,7 +291,7 @@ function enqueue(state, work) {
             // Never include API response bodies or credentials in logs.
             const message = String(error.message)
                 .split(state.cfg.token)
-                .join('[Token]');
+                .join("[Token]");
             state.context.warn?.(`Somfy Tahoma: ${message}`);
         });
     return state.queue;
@@ -302,108 +302,143 @@ function dispose(state) {
     for (const req of state.requests) req.destroy();
 }
 const actions = [
-    'switch',
-    'toggle',
-    'brightness',
-    'open',
-    'close',
-    'upDown',
-    'stop',
-    'position',
-    'slats',
-    'triggerStatus',
+    "switch",
+    "toggle",
+    "brightness",
+    "open",
+    "close",
+    "upDown",
+    "stop",
+    "position",
+    "slats",
+    "triggerStatus",
 ];
-const settings = ['ip', 'token', 'deviceName', 'deviceId', 'interval'];
+const settings = ["ip", "token", "deviceName", "deviceId", "interval"];
 
 module.exports = {
-    type: 'somfy-tahoma',
-    category: 'Geräte',
-    label: 'Somfy Tahoma',
-    color: '#f97316',
+    translations: {
+        de: {
+            carplay_stop: "Stopp",
+            tahoma_action_label: "TaHoma-Geräteliste laden",
+            tahoma_id_label: "Geräte-ID (deviceURL, hat Vorrang vor Name)",
+            tahoma_invalid_connection:
+                "TaHoma: IP-Adresse und Developer-Mode Token konfigurieren",
+            tahoma_invalid_list: "Ungültige TaHoma-Geräteliste",
+            ui_offnen: "Öffnen",
+            ui_stopp: "Stopp",
+            ui_stop_713: "Stop",
+            common_device_category: "Geräte",
+            common_unknown_action: "Unbekannte Plugin-Aktion",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+        },
+        en: {
+            carplay_stop: "Stop",
+            tahoma_action_label: "Load TaHoma device list",
+            tahoma_id_label:
+                "Device ID (deviceURL, takes precedence over name)",
+            tahoma_invalid_connection:
+                "TaHoma: Configure the IP address and Developer Mode token",
+            tahoma_invalid_list: "Invalid TaHoma device list",
+            ui_offnen: "Open",
+            ui_stopp: "Stop",
+            ui_stop_713: "Stop",
+            common_device_category: "Devices",
+            common_unknown_action: "Unknown plugin action",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+        },
+    },
+    type: "somfy-tahoma",
+    category: "Geräte",
+    label: "Somfy Tahoma",
+    color: "#f97316",
     description:
-        'Lokale TaHoma-API (Developer Mode). Geräte-ID = vollständige deviceURL; alternativ eindeutiger Gerätename. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Toggle und Trigger reagieren auf jedes 0/1-Telegramm. Rückmeldungen nur soweit vom Gerät unterstützt.',
+        "Lokale TaHoma-API (Developer Mode). Geräte-ID = vollständige deviceURL; alternativ eindeutiger Gerätename. Auf/Ab: 0=Auf, 1=Ab. Position: 0=offen, 100=geschlossen. Toggle und Trigger reagieren auf jedes 0/1-Telegramm. Rückmeldungen nur soweit vom Gerät unterstützt.",
     inputs: [
-        { handle: 'ip', label: 'IP Adresse' },
-        { handle: 'token', label: 'Token' },
-        { handle: 'deviceName', label: 'Gerätename' },
-        { handle: 'deviceId', label: 'Geräte ID' },
-        { handle: 'switch', label: 'Schalten (0/1)' },
-        { handle: 'toggle', label: 'Toggle (0/1)' },
-        { handle: 'brightness', label: 'Dimmwert (0–100 %)' },
-        { handle: 'open', label: 'Öffnen' },
-        { handle: 'close', label: 'Schliessen' },
-        { handle: 'upDown', label: 'Auf/Ab (0/1)' },
-        { handle: 'stop', label: 'Stop' },
-        { handle: 'position', label: 'Position (0–100 %)' },
-        { handle: 'slats', label: 'Lamellenwinkel (0–100 %)' },
-        { handle: 'triggerStatus', label: 'Status Trigger' },
-        { handle: 'interval', label: 'Status Intervall (Sekunden)' },
+        { handle: "ip", label: "IP Adresse" },
+        { handle: "token", label: "Token" },
+        { handle: "deviceName", label: "Gerätename" },
+        { handle: "deviceId", label: "Geräte ID" },
+        { handle: "switch", label: "Schalten (0/1)" },
+        { handle: "toggle", label: "Toggle (0/1)" },
+        { handle: "brightness", label: "Dimmwert (0–100 %)" },
+        { handle: "open", label: "Öffnen" },
+        { handle: "close", label: "Schliessen" },
+        { handle: "upDown", label: "Auf/Ab (0/1)" },
+        { handle: "stop", label: "Stop" },
+        { handle: "position", label: "Position (0–100 %)" },
+        { handle: "slats", label: "Lamellenwinkel (0–100 %)" },
+        { handle: "triggerStatus", label: "Status Trigger" },
+        { handle: "interval", label: "Status Intervall (Sekunden)" },
     ],
     outputs: [
-        { handle: 'status', label: 'Status (0/1)' },
-        { handle: 'brightness', label: 'Helligkeit (0–100 %)' },
-        { handle: 'position', label: 'Position (0–100 %)' },
-        { handle: 'slats', label: 'Lamellenwinkel (0–100 %)' },
-        { handle: 'moving', label: 'Fährt (0/1)' },
+        { handle: "status", label: "Status (0/1)" },
+        { handle: "brightness", label: "Helligkeit (0–100 %)" },
+        { handle: "position", label: "Position (0–100 %)" },
+        { handle: "slats", label: "Lamellenwinkel (0–100 %)" },
+        { handle: "moving", label: "Fährt (0/1)" },
     ],
     globalSettings: [
-        { key: 'ip', label: 'TaHoma IP-Adresse', type: 'text' },
-        { key: 'token', label: 'Developer-Mode Token', type: 'password' },
+        { key: "ip", label: "TaHoma IP-Adresse", type: "text" },
+        { key: "token", label: "Developer-Mode Token", type: "password" },
         {
-            key: 'gatewayPin',
-            label: 'Gateway-PIN (optional, zusätzliche Zertifikatsprüfung)',
-            type: 'text',
-            placeholder: '1234-5678-9012',
+            key: "gatewayPin",
+            label: "Gateway-PIN (optional, zusätzliche Zertifikatsprüfung)",
+            type: "text",
+            placeholder: "1234-5678-9012",
         },
     ],
-    globalActions: [{ key: 'listDevices', label: 'TaHoma-Geräteliste laden' }],
+    globalActions: [{ key: "listDevices", label: "TaHoma-Geräteliste laden" }],
     async handleGlobalAction(action, values, context) {
-        if (action !== 'listDevices')
-            throw new Error('Unbekannte Plugin-Aktion');
+        if (action !== "listDevices")
+            throw new Error("Unbekannte Plugin-Aktion");
         return listDevices(values, context);
     },
     config: [
-        { key: 'deviceName', label: 'Gerätename', type: 'text' },
+        { key: "deviceName", label: "Gerätename", type: "text" },
         {
-            key: 'deviceId',
-            label: 'Geräte-ID (deviceURL, hat Vorrang vor Name)',
-            type: 'async-select',
+            key: "deviceId",
+            label: "Geräte-ID (deviceURL, hat Vorrang vor Name)",
+            type: "async-select",
             allowCustomValue: true,
             showValue: true,
             optionsSource: {
-                action: 'listDevices',
-                parameters: ['ip', 'token', 'gatewayPin'],
-                resultKey: 'devices',
-                valueKey: 'id',
-                labelKey: 'name',
+                action: "listDevices",
+                parameters: ["ip", "token", "gatewayPin"],
+                resultKey: "devices",
+                valueKey: "id",
+                labelKey: "name",
             },
-            placeholder: 'io://1234-5678-9012/123456#1',
+            placeholder: "io://1234-5678-9012/123456#1",
         },
         {
-            key: 'interval',
-            label: 'Status Intervall in Sekunden (Standard 10, 0 = aus)',
-            type: 'number',
-            placeholder: '10',
+            key: "interval",
+            label: "Status Intervall in Sekunden (Standard 10, 0 = aus)",
+            type: "number",
+            placeholder: "10",
         },
     ],
     execute(inputs, data, context) {
-        const id = context.nodeId || 'default';
+        const id = context.nodeId || "default";
         let state = states.get(id);
         const stored = {
             ...(state?.inputs || context.initialInputs || {}),
             ...inputs,
         };
         const pick = (key) =>
-            stored[key] !== undefined && stored[key] !== ''
+            stored[key] !== undefined && stored[key] !== ""
                 ? stored[key]
-                : data[key] !== undefined && data[key] !== ''
+                : data[key] !== undefined && data[key] !== ""
                   ? data[key]
                   : context.globalSetting?.(key);
         const cfg = Object.fromEntries(settings.map((key) => [key, pick(key)]));
-        for (const key of ['ip', 'token', 'deviceName', 'deviceId'])
-            cfg[key] = String(cfg[key] ?? '').trim();
+        for (const key of ["ip", "token", "deviceName", "deviceId"])
+            cfg[key] = String(cfg[key] ?? "").trim();
         cfg.gatewayPin = String(
-            context.globalSetting?.('gatewayPin') || '',
+            context.globalSetting?.("gatewayPin") || "",
         ).trim();
         const n = cfg.interval == null ? 10 : Number(cfg.interval);
         cfg.interval =
@@ -462,14 +497,14 @@ module.exports = {
             const value = inputs[handle];
             enqueue(state, () => {
                 if (
-                    ['open', 'close', 'stop', 'triggerStatus'].includes(
+                    ["open", "close", "stop", "triggerStatus"].includes(
                         handle,
                     ) &&
                     bit(value) === undefined
                 ) {
-                    throw new Error('Trigger erwartet 0 oder 1');
+                    throw new Error("Trigger erwartet 0 oder 1");
                 }
-                return handle === 'triggerStatus'
+                return handle === "triggerStatus"
                     ? refresh(state)
                     : command(state, handle, value);
             });

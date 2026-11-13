@@ -1,6 +1,6 @@
 /**
  * @plugin    BWM – Bewegungsmelder mit Helligkeits- & Nachlaufsteuerung
- * @version   1.0.4
+ * @version   1.0.5
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -99,6 +99,42 @@ function clearTimer(s) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            carplay_off: "Aus",
+            carplay_trigger: "Auslösen",
+            native_active: "Aktiv",
+            logic_active: "Aktiv",
+            icon_manager_enabled: "Aktiv",
+            sch_trigger_type: "Auslöser",
+            sch_col_active: "Aktiv",
+            scn_trigger: "Trigger",
+            ui_aus: "Aus",
+            ui_helligkeit: "Helligkeit",
+            ui_auslosen: "Auslösen",
+            ui_an: "An",
+            ui_freigabe: "Freigabe",
+            logic_convert_number: "number",
+            climate_off: "Aus",
+        },
+        en: {
+            carplay_off: "Off",
+            carplay_trigger: "Trigger",
+            native_active: "Active",
+            logic_active: "Active",
+            icon_manager_enabled: "Enabled",
+            sch_trigger_type: "Trigger",
+            sch_col_active: "Active",
+            scn_trigger: "Trigger",
+            ui_aus: "Off",
+            ui_helligkeit: "Brightness",
+            ui_auslosen: "Trigger",
+            ui_an: "On",
+            ui_freigabe: "Enable",
+            logic_convert_number: "Number",
+            climate_off: "Off",
+        },
+    },
     type: "bwm",
     category: "Automatisierung",
     label: "BWM",

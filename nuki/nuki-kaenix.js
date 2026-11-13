@@ -1,14 +1,14 @@
 /**
  * @plugin Nuki
- * @version 1.0.6
+ * @version 1.0.7
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  */
-'use strict';
-const http = require('http');
-const https = require('https');
-const path = require('path');
-const { createHash } = require('crypto');
+"use strict";
+const http = require("http");
+const https = require("https");
+const path = require("path");
+const { createHash } = require("crypto");
 const bridgeQueues = new Map();
 const callbackListeners = new Map();
 const callbackSessions = new Map();
@@ -19,45 +19,45 @@ let mqtt;
 function getMqtt() {
     if (mqtt) return mqtt;
     try {
-        mqtt = require('mqtt');
+        mqtt = require("mqtt");
     } catch {
         try {
             mqtt = require(
-                require.resolve('mqtt', {
+                require.resolve("mqtt", {
                     paths: [
                         process.cwd(),
-                        path.resolve(__dirname, '../../backend'),
+                        path.resolve(__dirname, "../../backend"),
                     ],
                 }),
             );
         } catch {
             throw new Error(
-                'Nuki: MQTT-Bibliothek fehlt; Homeserver-Backend aktualisieren',
+                "Nuki: MQTT-Bibliothek fehlt; Homeserver-Backend aktualisieren",
             );
         }
     }
     return mqtt;
 }
-const on = (value) => [true, 1, '1', 'true'].includes(value);
+const on = (value) => [true, 1, "1", "true"].includes(value);
 function number(value, min, max) {
     if (
-        typeof value !== 'number' &&
-        (typeof value !== 'string' || !value.trim())
+        typeof value !== "number" &&
+        (typeof value !== "string" || !value.trim())
     )
         return undefined;
     const n = Number(value);
     return Number.isInteger(n) && n >= min && n <= max ? n : undefined;
 }
 function boolean(value) {
-    if ([true, 1, '1', 'true'].includes(value)) return true;
-    if ([false, 0, '0', 'false'].includes(value)) return false;
+    if ([true, 1, "1", "true"].includes(value)) return true;
+    if ([false, 0, "0", "false"].includes(value)) return false;
     return undefined;
 }
 function callbackAddress(context) {
-    const value = String(context.getServerIp?.() || '').trim();
+    const value = String(context.getServerIp?.() || "").trim();
     if (!value) {
         throw new Error(
-            'Nuki: HomeServer-IP fehlt; in den Einstellungen eintragen',
+            "Nuki: HomeServer-IP fehlt; in den Einstellungen eintragen",
         );
     }
     try {
@@ -71,33 +71,33 @@ function callbackAddress(context) {
             url.search ||
             url.hash ||
             (!/^https?:\/\//iu.test(value) &&
-                (url.pathname !== '/' || url.hostname !== value.toLowerCase()))
+                (url.pathname !== "/" || url.hostname !== value.toLowerCase()))
         )
             throw new Error();
         return url.hostname;
     } catch {
         throw new Error(
-            'Nuki: HomeServer-IP in den Einstellungen ist ungültig',
+            "Nuki: HomeServer-IP in den Einstellungen ist ungültig",
         );
     }
 }
 function options(data, context) {
-    const mode = data.mode || 'bridge';
-    if (!['bridge', 'mqtt', 'web'].includes(mode))
-        throw new Error('Nuki: ungültige Verbindungsart');
+    const mode = data.mode || "bridge";
+    if (!["bridge", "mqtt", "web"].includes(mode))
+        throw new Error("Nuki: ungültige Verbindungsart");
     const interval = number(data.interval ?? 60, 0, 3600);
     if (interval === undefined || (interval > 0 && interval < 30)) {
         throw new Error(
-            'Nuki: Statusintervall muss 0 oder 30–3600 Sekunden sein',
+            "Nuki: Statusintervall muss 0 oder 30–3600 Sekunden sein",
         );
     }
     const cfg = { mode, interval };
-    const id = String(data.deviceId ?? '').trim();
-    if (mode === 'mqtt') {
+    const id = String(data.deviceId ?? "").trim();
+    if (mode === "mqtt") {
         if (!/^[a-fA-F0-9]{1,16}$/u.test(id))
-            throw new Error('Nuki: MQTT-Geräte-ID muss hexadezimal sein');
+            throw new Error("Nuki: MQTT-Geräte-ID muss hexadezimal sein");
         cfg.topic = `nuki/${id}`;
-        cfg.host = String(data.host || '').trim();
+        cfg.host = String(data.host || "").trim();
         cfg.tls = on(data.mqttTLS);
         cfg.port = number(
             Number(data.port) === 0 || data.port == null
@@ -108,8 +108,8 @@ function options(data, context) {
             1,
             65535,
         );
-        cfg.username = String(data.username || '');
-        cfg.password = String(data.password || '');
+        cfg.username = String(data.username || "");
+        cfg.password = String(data.password || "");
     } else {
         // HTTP IDs are decimal, or explicitly hexadecimal with 0x prefix.
         if (
@@ -118,15 +118,15 @@ function options(data, context) {
             Number(id) <= 0
         ) {
             throw new Error(
-                'Nuki: Geräte-ID muss dezimal oder hexadezimal mit 0x-Präfix sein',
+                "Nuki: Geräte-ID muss dezimal oder hexadezimal mit 0x-Präfix sein",
             );
         }
         cfg.id = Number(id);
-        cfg.token = String(data.token || '').trim();
+        cfg.token = String(data.token || "").trim();
         if (!cfg.token || /[\s\u0000-\u001f\u007f]/u.test(cfg.token))
-            throw new Error('Nuki: API-Token fehlt oder ist ungültig');
-        if (mode === 'bridge') {
-            cfg.host = String(data.host || '').trim();
+            throw new Error("Nuki: API-Token fehlt oder ist ungültig");
+        if (mode === "bridge") {
+            cfg.host = String(data.host || "").trim();
             cfg.port = number(
                 Number(data.port) === 0 || data.port == null ? 8080 : data.port,
                 1,
@@ -136,7 +136,7 @@ function options(data, context) {
             if (cfg.callback) {
                 cfg.callbackHost = callbackAddress(context);
                 cfg.callbackPort = number(
-                    data.callbackPort == null || data.callbackPort === ''
+                    data.callbackPort == null || data.callbackPort === ""
                         ? 8099
                         : data.callbackPort,
                     1,
@@ -144,12 +144,12 @@ function options(data, context) {
                 );
                 if (!cfg.callbackPort) {
                     throw new Error(
-                        'Nuki: Callback-Port muss zwischen 1 und 65535 liegen',
+                        "Nuki: Callback-Port muss zwischen 1 und 65535 liegen",
                     );
                 }
                 if (/[\s/\\?#@\u0000-\u001f]/u.test(cfg.callbackHost)) {
                     throw new Error(
-                        'Nuki: Callback-Adresse oder Port ist ungültig',
+                        "Nuki: Callback-Adresse oder Port ist ungültig",
                     );
                 }
                 const callbackUrl = new URL(
@@ -157,36 +157,36 @@ function options(data, context) {
                 );
                 if (callbackUrl.hostname !== cfg.callbackHost.toLowerCase()) {
                     throw new Error(
-                        'Nuki: Callback-Adresse oder Port ist ungültig',
+                        "Nuki: Callback-Adresse oder Port ist ungültig",
                     );
                 }
             }
             cfg.deviceType =
                 data.deviceType == null ||
-                data.deviceType === '' ||
-                data.deviceType === 'auto'
-                    ? 'auto'
+                data.deviceType === "" ||
+                data.deviceType === "auto"
+                    ? "auto"
                     : number(data.deviceType, 0, 5);
             if (
-                cfg.deviceType !== 'auto' &&
+                cfg.deviceType !== "auto" &&
                 ![0, 3, 4, 5].includes(cfg.deviceType)
             ) {
-                throw new Error('Nuki: nicht unterstützter Gerätetyp');
+                throw new Error("Nuki: nicht unterstützter Gerätetyp");
             }
         }
     }
-    if (mode !== 'web') {
+    if (mode !== "web") {
         if (
             !cfg.host ||
             /[\s/\\?#@\u0000-\u001f]/u.test(cfg.host) ||
             !cfg.port
         ) {
-            throw new Error('Nuki: Hostname oder Port ist ungültig');
+            throw new Error("Nuki: Hostname oder Port ist ungültig");
         }
         // Validate host syntax without allowing credentials, paths or query strings.
         const url = new URL(`http://${cfg.host}:${cfg.port}`);
         if (url.port && Number(url.port) !== cfg.port)
-            throw new Error('Nuki: Hostname oder Port ist ungültig');
+            throw new Error("Nuki: Hostname oder Port ist ungültig");
     }
     return cfg;
 }
@@ -221,7 +221,7 @@ function cancelBridgeRequests(owner) {
         for (const job of cancelled)
             job.reject(
                 new Error(
-                    'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                    "Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung",
                 ),
             );
     }
@@ -241,7 +241,7 @@ function drainBridge(key, queue) {
         ? requestHttp(job.owner, job.endpoint, job.options)
         : Promise.reject(
               new Error(
-                  'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                  "Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung",
               ),
           );
     const complete = (settle, value) => {
@@ -255,7 +255,7 @@ function drainBridge(key, queue) {
     );
 }
 function request(s, endpoint, options = {}) {
-    if (s.cfg.mode !== 'bridge') return requestHttp(s, endpoint, options);
+    if (s.cfg.mode !== "bridge") return requestHttp(s, endpoint, options);
     const key = bridgeKey(s.cfg);
     let queue = bridgeQueues.get(key);
     if (
@@ -264,7 +264,7 @@ function request(s, endpoint, options = {}) {
         (queue.running || queue.pending.length)
     ) {
         return Promise.reject(
-            new Error('Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet'),
+            new Error("Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet"),
         );
     }
     if (!queue) {
@@ -281,26 +281,26 @@ function request(s, endpoint, options = {}) {
 function requestHttp(s, endpoint, { action, simple, query } = {}) {
     const cfg = s.cfg;
     const url =
-        cfg.mode === 'web'
+        cfg.mode === "web"
             ? new URL(`https://api.nuki.io/smartlock/${cfg.id}${endpoint}`)
             : new URL(`http://${cfg.host}:${cfg.port}${endpoint}`);
     let body;
-    const headers = { Accept: 'application/json' };
-    if (cfg.mode === 'web') {
+    const headers = { Accept: "application/json" };
+    if (cfg.mode === "web") {
         headers.Authorization = `Bearer ${cfg.token}`;
         if (action !== undefined && !simple) {
             body = JSON.stringify({ action });
-            headers['Content-Type'] = 'application/json';
-            headers['Content-Length'] = Buffer.byteLength(body);
+            headers["Content-Type"] = "application/json";
+            headers["Content-Length"] = Buffer.byteLength(body);
         }
     } else {
-        url.searchParams.set('token', cfg.token);
-        if (endpoint !== '/list' && !endpoint.startsWith('/callback/')) {
-            url.searchParams.set('nukiId', cfg.id);
-            url.searchParams.set('deviceType', s.deviceType);
+        url.searchParams.set("token", cfg.token);
+        if (endpoint !== "/list" && !endpoint.startsWith("/callback/")) {
+            url.searchParams.set("nukiId", cfg.id);
+            url.searchParams.set("deviceType", s.deviceType);
         }
         if (action !== undefined && !simple)
-            url.searchParams.set('action', action);
+            url.searchParams.set("action", action);
         for (const [key, value] of Object.entries(query || {}))
             url.searchParams.set(key, value);
         // Wait for the bridge's result; noWait=1 only acknowledges receipt.
@@ -308,18 +308,18 @@ function requestHttp(s, endpoint, { action, simple, query } = {}) {
     return new Promise((resolve, reject) => {
         let timer;
         const fail = (message) => reject(new Error(message));
-        const req = (url.protocol === 'https:' ? https : http).request(
+        const req = (url.protocol === "https:" ? https : http).request(
             url,
             {
                 method:
-                    cfg.mode === 'web' && action !== undefined ? 'POST' : 'GET',
+                    cfg.mode === "web" && action !== undefined ? "POST" : "GET",
                 headers,
             },
             (res) => {
                 const code = res.statusCode;
                 if (code === 429) {
-                    const retry = res.headers['retry-after'];
-                    const seconds = /^\d+$/u.test(retry || '')
+                    const retry = res.headers["retry-after"];
+                    const seconds = /^\d+$/u.test(retry || "")
                         ? Number(retry)
                         : (Date.parse(retry) - Date.now()) / 1000;
                     s.retryAt =
@@ -327,40 +327,40 @@ function requestHttp(s, endpoint, { action, simple, query } = {}) {
                         Math.min(3600, Math.max(60, seconds || 60)) * 1000;
                 }
                 if (code < 200 || code >= 300) {
-                    res.on('error', () =>
+                    res.on("error", () =>
                         fail(
-                            'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                            "Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung",
                         ),
                     );
-                    res.on('end', () => fail(`Nuki: HTTP ${code}`));
+                    res.on("end", () => fail(`Nuki: HTTP ${code}`));
                     res.resume();
                     return;
                 }
                 const chunks = [];
                 let size = 0;
-                res.on('data', (chunk) => {
+                res.on("data", (chunk) => {
                     size += chunk.length;
                     if (size > 256 * 1024) {
-                        fail('Nuki: ungültige API-Antwort');
+                        fail("Nuki: ungültige API-Antwort");
                         req.destroy();
                     } else chunks.push(chunk);
                 });
-                res.on('error', () =>
+                res.on("error", () =>
                     fail(
-                        'Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung',
+                        "Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung",
                     ),
                 );
-                res.on('end', () => {
+                res.on("end", () => {
                     if (code === 204 && action !== undefined) {
                         resolve(null);
                         return;
                     }
                     try {
                         resolve(
-                            JSON.parse(Buffer.concat(chunks).toString('utf8')),
+                            JSON.parse(Buffer.concat(chunks).toString("utf8")),
                         );
                     } catch {
-                        fail('Nuki: ungültige API-Antwort');
+                        fail("Nuki: ungültige API-Antwort");
                     }
                 });
             },
@@ -368,13 +368,13 @@ function requestHttp(s, endpoint, { action, simple, query } = {}) {
         s.requests.add(req);
         timer = setTimeout(() => req.destroy(), 20000);
         timer.unref?.();
-        req.on('close', () => {
+        req.on("close", () => {
             clearTimeout(timer);
             s.requests.delete(req);
-            fail('Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung');
+            fail("Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung");
         });
-        req.on('error', () =>
-            fail('Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung'),
+        req.on("error", () =>
+            fail("Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung"),
         );
         req.end(body);
     });
@@ -385,29 +385,29 @@ function receiveCallback(listener, req, res) {
     const session = [...listener.sessions].find(
         (item) => item.path === req.url,
     );
-    if (!session || req.method !== 'POST') {
+    if (!session || req.method !== "POST") {
         res.writeHead(session ? 405 : 404).end();
         req.resume();
         return;
     }
     const chunks = [];
     let size = 0;
-    req.on('error', () => {});
-    req.on('data', (chunk) => {
+    req.on("error", () => {});
+    req.on("data", (chunk) => {
         size += chunk.length;
         if (size > 16 * 1024) {
             if (!res.headersSent) res.writeHead(413).end();
         } else chunks.push(chunk);
     });
-    req.on('end', () => {
+    req.on("end", () => {
         if (size > 16 * 1024) return;
         let payload;
         try {
-            payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
             if (
                 !payload ||
                 Array.isArray(payload) ||
-                typeof payload !== 'object' ||
+                typeof payload !== "object" ||
                 !Number.isSafeInteger(payload.nukiId) ||
                 number(payload.state, 0, 255) === undefined
             ) {
@@ -438,7 +438,7 @@ function receiveCallback(listener, req, res) {
 }
 function attachCallback(s) {
     const cfg = s.cfg;
-    const digest = createHash('sha256')
+    const digest = createHash("sha256")
         .update(
             JSON.stringify([
                 cfg.host.toLowerCase(),
@@ -448,11 +448,11 @@ function attachCallback(s) {
                 cfg.callbackPort,
             ]),
         )
-        .digest('hex');
+        .digest("hex");
     const callbackPath = `/nuki/callback/${digest}`;
     const url = `http://${cfg.callbackHost.toLowerCase()}:${cfg.callbackPort}${callbackPath}`;
     if (url.length > 254)
-        throw new Error('Nuki: Callback-Adresse oder Port ist ungültig');
+        throw new Error("Nuki: Callback-Adresse oder Port ist ungültig");
     let session = callbackSessions.get(url);
     if (!session) {
         let listener = callbackListeners.get(cfg.callbackPort);
@@ -464,7 +464,7 @@ function attachCallback(s) {
             listener.server.requestTimeout = 10000;
             listener.server.headersTimeout = 10000;
             listener.ready = new Promise((resolve, reject) => {
-                listener.server.once('error', reject);
+                listener.server.once("error", reject);
                 listener.server.listen(cfg.callbackPort, resolve);
             });
             listener.server.unref();
@@ -511,9 +511,9 @@ async function ensureCallback(s) {
         session.pending = (async () => {
             await session.listener.ready;
             if (Date.now() < session.retryAt)
-                throw new Error('Nuki: Callback-Einrichtung fehlgeschlagen');
+                throw new Error("Nuki: Callback-Einrichtung fehlgeschlagen");
             if (!session.members.size) return;
-            const result = await request(session, '/callback/list');
+            const result = await request(session, "/callback/list");
             if (!session.members.size) return;
             if (
                 !Array.isArray(result?.callbacks) ||
@@ -521,28 +521,28 @@ async function ensureCallback(s) {
                     (item) =>
                         !Number.isInteger(item?.id) ||
                         item.id < 0 ||
-                        typeof item.url !== 'string',
+                        typeof item.url !== "string",
                 )
             ) {
-                throw new Error('Nuki: ungültige API-Antwort');
+                throw new Error("Nuki: ungültige API-Antwort");
             }
             if (!result.callbacks.some((item) => item.url === session.url)) {
                 if (result.callbacks.length >= 3) {
-                    const removed = await request(session, '/callback/remove', {
+                    const removed = await request(session, "/callback/remove", {
                         query: { id: result.callbacks.at(-1).id },
                     });
                     if (!session.members.size) return;
                     if (removed?.success !== true)
                         throw new Error(
-                            'Nuki: Callback-Einrichtung fehlgeschlagen',
+                            "Nuki: Callback-Einrichtung fehlgeschlagen",
                         );
                 }
-                const added = await request(session, '/callback/add', {
+                const added = await request(session, "/callback/add", {
                     query: { url: session.url },
                 });
                 if (added?.success !== true)
                     throw new Error(
-                        'Nuki: Callback-Einrichtung fehlgeschlagen',
+                        "Nuki: Callback-Einrichtung fehlgeschlagen",
                     );
             }
             session.registered = true;
@@ -553,62 +553,62 @@ async function ensureCallback(s) {
     await session.pending;
 }
 const stateTexts = {
-    0: 'Nicht kalibriert',
-    1: 'Abgeschlossen',
-    2: 'Wird aufgeschlossen',
-    3: 'Aufgeschlossen',
-    4: 'Wird abgeschlossen',
-    5: 'Falle zurückgezogen',
-    6: 'Aufgeschlossen (Lock ’n’ Go)',
-    7: 'Falle wird zurückgezogen',
-    224: 'Ungültiger Zugangscode',
-    225: 'Ungültiger Fingerabdruck',
-    254: 'Motor blockiert',
-    255: 'Unbekannter Schlosszustand',
+    0: "Nicht kalibriert",
+    1: "Abgeschlossen",
+    2: "Wird aufgeschlossen",
+    3: "Aufgeschlossen",
+    4: "Wird abgeschlossen",
+    5: "Falle zurückgezogen",
+    6: "Aufgeschlossen (Lock ’n’ Go)",
+    7: "Falle wird zurückgezogen",
+    224: "Ungültiger Zugangscode",
+    225: "Ungültiger Fingerabdruck",
+    254: "Motor blockiert",
+    255: "Unbekannter Schlosszustand",
 };
 function report(s, p) {
-    if (!p || typeof p !== 'object' || Array.isArray(p))
-        throw new Error('Nuki: ungültige API-Antwort');
+    if (!p || typeof p !== "object" || Array.isArray(p))
+        throw new Error("Nuki: ungültige API-Antwort");
     const state = number(p.state, 0, 255);
     if (state !== undefined) {
-        s.output('state', state);
-        s.output('stateText', stateTexts[state] || stateTexts[255]);
+        s.output("state", state);
+        s.output("stateText", stateTexts[state] || stateTexts[255]);
         // Clear the previous boolean during movements/errors rather than claiming a settled state.
         s.output(
-            'locked',
+            "locked",
             state === 1 ? true : [3, 5, 6].includes(state) ? false : null,
         );
     }
     for (const key of [
-        'batteryCritical',
-        'batteryCharging',
-        'keypadBatteryCritical',
-        'doorsensorBatteryCritical',
+        "batteryCritical",
+        "batteryCharging",
+        "keypadBatteryCritical",
+        "doorsensorBatteryCritical",
     ]) {
         const value = boolean(p[key]);
         if (value !== undefined) s.output(key, value);
     }
     const charge = number(p.batteryChargeState ?? p.batteryCharge, 0, 100);
-    if (charge !== undefined) s.output('batteryCharge', charge);
+    if (charge !== undefined) s.output("batteryCharge", charge);
     const door = number(p.doorsensorState ?? p.doorState, 0, 255);
     if (door !== undefined) {
-        s.output('doorState', door);
-        s.output('doorClosed', door === 2 ? true : door === 3 ? false : null);
+        s.output("doorState", door);
+        s.output("doorClosed", door === 2 ? true : door === 3 ? false : null);
     }
     return state !== undefined;
 }
 function deviceType(s, value) {
     if (![0, 3, 4, 5].includes(value))
-        throw new Error('Nuki: nicht unterstützter Gerätetyp');
+        throw new Error("Nuki: nicht unterstützter Gerätetyp");
     s.deviceType = value;
-    s.output('deviceType', value);
+    s.output("deviceType", value);
 }
 async function read(s, direct = false) {
     if (!s.active() || s.reading || s.busy || Date.now() < s.retryAt) return;
     s.reading = true;
     const epoch = s.epoch;
     try {
-        if (s.cfg.mode === 'bridge' && s.cfg.callback) {
+        if (s.cfg.mode === "bridge" && s.cfg.callback) {
             let host;
             try {
                 host = callbackAddress(s.context);
@@ -623,57 +623,57 @@ async function read(s, direct = false) {
         }
         let p,
             available = true;
-        if (s.cfg.mode === 'web') {
-            const result = await request(s, '');
+        if (s.cfg.mode === "web") {
+            const result = await request(s, "");
             if (!s.active() || epoch !== s.epoch) return;
             if (result?.smartlockId !== s.cfg.id)
-                throw new Error('Nuki: ungültige API-Antwort');
+                throw new Error("Nuki: ungültige API-Antwort");
             deviceType(s, result.type);
             available = result.serverState === 0;
             p = result.state;
         } else {
-            const list = await request(s, '/list');
+            const list = await request(s, "/list");
             if (!s.active() || epoch !== s.epoch) return;
             if (!Array.isArray(list))
-                throw new Error('Nuki: ungültige API-Antwort');
+                throw new Error("Nuki: ungültige API-Antwort");
             const matches = list.filter(
                 (item) =>
                     item?.nukiId === s.cfg.id &&
-                    (s.cfg.deviceType === 'auto' ||
+                    (s.cfg.deviceType === "auto" ||
                         item.deviceType === s.cfg.deviceType),
             );
             if (matches.length !== 1)
                 throw new Error(
-                    'Nuki: Gerät nicht eindeutig gefunden; ID und Gerätetyp prüfen',
+                    "Nuki: Gerät nicht eindeutig gefunden; ID und Gerätetyp prüfen",
                 );
             deviceType(s, matches[0].deviceType);
             p = matches[0].lastKnownState;
             if (direct) {
-                p = await request(s, '/lockState');
+                p = await request(s, "/lockState");
                 if (!s.active() || epoch !== s.epoch) return;
                 if (p?.success !== true)
-                    throw new Error('Nuki: Statusabfrage abgelehnt');
+                    throw new Error("Nuki: Statusabfrage abgelehnt");
             }
         }
-        if (!report(s, p)) throw new Error('Nuki: ungültige API-Antwort');
+        if (!report(s, p)) throw new Error("Nuki: ungültige API-Antwort");
         s.ready = available;
-        s.output('connected', true);
-        s.output('available', available);
+        s.output("connected", true);
+        s.output("available", available);
         s.context.setNodeStatus?.(available);
-        if (!available) s.fail('Nuki: Schloss nicht erreichbar');
-        else s.output('error', '');
-        if (s.cfg.mode === 'bridge' && s.cfg.callback) {
+        if (!available) s.fail("Nuki: Schloss nicht erreichbar");
+        else s.output("error", "");
+        if (s.cfg.mode === "bridge" && s.cfg.callback) {
             try {
                 await ensureCallback(s);
             } catch {
-                s.fail('Nuki: Callback-Einrichtung fehlgeschlagen');
+                s.fail("Nuki: Callback-Einrichtung fehlgeschlagen");
             }
         }
     } catch (err) {
         if (!s.active() || epoch !== s.epoch) return;
         s.ready = false;
-        s.output('connected', false);
-        s.output('available', false);
+        s.output("connected", false);
+        s.output("available", false);
         s.context.setNodeStatus?.(false);
         s.fail(err.message);
     } finally {
@@ -683,41 +683,41 @@ async function read(s, direct = false) {
 function finish(s) {
     clearTimeout(s.commandTimer);
     s.busy = false;
-    s.output('busy', false);
+    s.output("busy", false);
 }
 async function command(s, action) {
     if (s.busy) {
-        s.fail('Nuki: Befehl läuft bereits; neues Telegramm verworfen');
+        s.fail("Nuki: Befehl läuft bereits; neues Telegramm verworfen");
         return;
     }
     if (!s.ready || Date.now() < s.retryAt) {
-        s.fail('Nuki: nicht bereit; Befehl wurde nicht gesendet');
+        s.fail("Nuki: nicht bereit; Befehl wurde nicht gesendet");
         return;
     }
-    if (s.cfg.mode === 'bridge' && bridgeQueues.has(bridgeKey(s.cfg))) {
-        s.fail('Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet');
+    if (s.cfg.mode === "bridge" && bridgeQueues.has(bridgeKey(s.cfg))) {
+        s.fail("Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet");
         return;
     }
     s.busy = true;
     s.epoch++;
-    s.output('busy', true);
-    s.output('commandAccepted', false);
-    s.output('error', '');
-    if (s.cfg.mode === 'mqtt') {
+    s.output("busy", true);
+    s.output("commandAccepted", false);
+    s.output("error", "");
+    if (s.cfg.mode === "mqtt") {
         const session = s.session;
         const epoch = s.epoch;
         s.commandTimer = setTimeout(() => {
             if (!s.active() || session !== s.session) return;
             finish(s);
             s.fail(
-                'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+                "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
             );
         }, 30000);
         s.commandTimer.unref?.();
         // QoS 0 deliberately prevents MQTT.js from replaying an in-flight unlock on reconnect.
         s.client.publish(
-            `${s.cfg.topic}/${action === 'unlock' ? 'unlock' : 'lockAction'}`,
-            action === 'unlock' ? 'true' : String(action),
+            `${s.cfg.topic}/${action === "unlock" ? "unlock" : "lockAction"}`,
+            action === "unlock" ? "true" : String(action),
             { qos: 0, retain: false },
             (err) => {
                 if (
@@ -730,37 +730,37 @@ async function command(s, action) {
                 if (err) {
                     finish(s);
                     s.fail(
-                        'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+                        "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
                     );
-                } else s.output('commandAccepted', true);
+                } else s.output("commandAccepted", true);
             },
         );
         return;
     }
     try {
-        const simple = action === 'unlock';
+        const simple = action === "unlock";
         const endpoint =
-            s.cfg.mode === 'web'
+            s.cfg.mode === "web"
                 ? simple
-                    ? '/action/unlock'
-                    : '/action'
+                    ? "/action/unlock"
+                    : "/action"
                 : simple
-                  ? '/unlock'
-                  : '/lockAction';
+                  ? "/unlock"
+                  : "/lockAction";
         const result = await request(s, endpoint, { action, simple });
         if (!s.active()) return;
         if (
             result?.success === false ||
-            (s.cfg.mode === 'bridge' && result?.success !== true)
+            (s.cfg.mode === "bridge" && result?.success !== true)
         )
-            throw new Error('Nuki: Befehl abgelehnt');
+            throw new Error("Nuki: Befehl abgelehnt");
         // Web HTTP 204 only means accepted. Only report actual state from subsequent GETs.
-        s.output('commandAccepted', true);
+        s.output("commandAccepted", true);
     } catch (err) {
         if (!s.active()) return;
         s.fail(err.message);
         s.context.warn(
-            'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+            "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
         );
     } finally {
         if (s.active()) {
@@ -774,8 +774,8 @@ function startMqtt(s) {
     const cfg = s.cfg;
     const library = getMqtt();
     s.client = library.connect({
-        protocol: cfg.tls ? 'mqtts' : 'mqtt',
-        host: cfg.host.replace(/^\[|\]$/gu, ''),
+        protocol: cfg.tls ? "mqtts" : "mqtt",
+        host: cfg.host.replace(/^\[|\]$/gu, ""),
         port: cfg.port,
         username: cfg.username || undefined,
         password: cfg.password || undefined,
@@ -796,8 +796,8 @@ function startMqtt(s) {
         s.hasState = false;
         s.deviceType = undefined;
         finish(s);
-        s.output('connected', false);
-        s.output('available', false);
+        s.output("connected", false);
+        s.output("available", false);
         s.context.setNodeStatus?.(false);
     };
     const ready = () => {
@@ -806,10 +806,10 @@ function startMqtt(s) {
             s.online &&
             s.hasState &&
             [0, 3, 4, 5].includes(s.deviceType);
-        s.output('available', s.ready);
+        s.output("available", s.ready);
         s.context.setNodeStatus?.(s.ready);
     };
-    s.client.on('connect', () => {
+    s.client.on("connect", () => {
         if (!s.active()) return;
         disconnected();
         s.receiving = true;
@@ -822,90 +822,90 @@ function startMqtt(s) {
                 granted.some((item) => item.qos > 2)
             ) {
                 s.receiving = false;
-                s.fail('Nuki: MQTT-Abonnement fehlgeschlagen');
+                s.fail("Nuki: MQTT-Abonnement fehlgeschlagen");
                 return;
             }
             s.subscribed = true;
-            s.output('connected', true);
-            s.output('error', '');
+            s.output("connected", true);
+            s.output("error", "");
             ready();
         });
     });
-    s.client.on('close', () => {
+    s.client.on("close", () => {
         if (s.busy && s.active())
             s.fail(
-                'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+                "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
             );
         s.receiving = false;
         disconnected();
     });
-    s.client.on('error', () =>
+    s.client.on("error", () =>
         s.fail(
-            'Nuki: MQTT-Verbindung fehlgeschlagen; Broker und Zugangsdaten prüfen',
+            "Nuki: MQTT-Verbindung fehlgeschlagen; Broker und Zugangsdaten prüfen",
         ),
     );
-    s.client.on('message', (topic, payload, packet) => {
+    s.client.on("message", (topic, payload, packet) => {
         if (!s.active() || !s.receiving || !topic.startsWith(`${cfg.topic}/`))
             return;
         if (payload.length > 256) {
-            s.fail('Nuki: ungültige MQTT-Nachricht');
+            s.fail("Nuki: ungültige MQTT-Nachricht");
             return;
         }
         const key = topic.slice(cfg.topic.length + 1);
-        const value = payload.toString('utf8').trim();
-        if (key === 'connected') {
+        const value = payload.toString("utf8").trim();
+        if (key === "connected") {
             const connected = boolean(value);
             if (connected === undefined) {
-                s.fail('Nuki: ungültige MQTT-Nachricht');
+                s.fail("Nuki: ungültige MQTT-Nachricht");
                 return;
             }
             s.online = connected;
             if (!connected && s.busy) {
                 finish(s);
                 s.fail(
-                    'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+                    "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
                 );
             }
-        } else if (key === 'deviceType') {
+        } else if (key === "deviceType") {
             try {
                 deviceType(s, number(value, 0, 5));
             } catch (err) {
                 s.deviceType = undefined;
                 s.fail(err.message);
             }
-        } else if (key === 'commandResponse') {
+        } else if (key === "commandResponse") {
             const code = number(value, 0, 255);
             // Retained replies belong to an earlier session, never to a new command.
             if (code !== undefined && !packet?.retain && s.busy) {
-                s.output('commandResult', code);
+                s.output("commandResult", code);
                 finish(s);
-                if (code !== 0) s.fail('Nuki: Befehl abgelehnt');
+                if (code !== 0) s.fail("Nuki: Befehl abgelehnt");
             }
         } else if (
-            ['state', 'batteryChargeState', 'doorsensorState'].includes(key)
+            ["state", "batteryChargeState", "doorsensorState"].includes(key)
         ) {
             const n = number(
                 value,
                 0,
-                key === 'batteryChargeState' ? 100 : 255,
+                key === "batteryChargeState" ? 100 : 255,
             );
             if (n === undefined) {
-                s.fail('Nuki: ungültige MQTT-Nachricht');
+                s.fail("Nuki: ungültige MQTT-Nachricht");
                 return;
             }
             report(s, { [key]: n });
-            if (key === 'state') s.hasState = true;
+            if (key === "state") s.hasState = true;
         } else if (
             [
-                'batteryCritical',
-                'batteryCharging',
-                'keypadBatteryCritical',
-                'doorsensorBatteryCritical',
+                "batteryCritical",
+                "batteryCharging",
+                "keypadBatteryCritical",
+                "doorsensorBatteryCritical",
             ].includes(key)
         ) {
             const b = boolean(value);
             if (b === undefined) {
-                s.fail('Nuki: ungültige MQTT-Nachricht');
+                s.fail("Nuki: ungültige MQTT-Nachricht");
                 return;
             }
             report(s, { [key]: b });
@@ -939,18 +939,18 @@ function start(id, cfg, context) {
     };
     s.fail = (message) => {
         if (!s.active()) return;
-        s.output('error', message);
+        s.output("error", message);
         s.context.warn(message);
     };
-    s.output('locked', null);
-    s.output('doorClosed', null);
-    s.output('connected', false);
-    s.output('available', false);
-    s.output('busy', false);
-    s.output('commandAccepted', false);
-    s.output('error', '');
+    s.output("locked", null);
+    s.output("doorClosed", null);
+    s.output("connected", false);
+    s.output("available", false);
+    s.output("busy", false);
+    s.output("commandAccepted", false);
+    s.output("error", "");
     context.setNodeStatus?.(false);
-    if (cfg.mode === 'mqtt') startMqtt(s);
+    if (cfg.mode === "mqtt") startMqtt(s);
     else {
         read(s);
         if (cfg.interval > 0) {
@@ -961,135 +961,360 @@ function start(id, cfg, context) {
     return s;
 }
 module.exports = {
-    type: 'nuki',
-    label: 'Nuki',
-    category: 'Geräte',
-    color: '#f97316',
+    translations: {
+        de: {
+            connected: "Verbunden",
+            set_server_ip_detect: "Automatisch erkennen",
+            nuki_description:
+                "Nuki Smart Locks über lokale Bridge, MQTT oder Nuki Web steuern und überwachen.",
+            nuki_unlock: "Aufschließen",
+            nuki_lock: "Abschließen",
+            nuki_unlatch: "Falle zurückziehen",
+            nuki_device_unlock: "Öffnen gemäß Nuki-Konfiguration",
+            nuki_trigger: "Trigger (0 = auf, 1 = zu)",
+            nuki_target: "Sollzustand (1 = abgeschlossen)",
+            nuki_state_code: "Schlosszustand (Code)",
+            nuki_state_text: "Schlosszustand (Text)",
+            nuki_locked: "Abgeschlossen (1/0/null)",
+            nuki_battery_critical: "Schlossbatterie kritisch",
+            nuki_battery_charge: "Schlossbatterie (%)",
+            nuki_battery_charging: "Schlossbatterie lädt",
+            nuki_keypad_battery: "Keypad-Batterie kritisch",
+            nuki_door_battery: "Türsensor-Batterie kritisch",
+            nuki_door_state: "Türsensorzustand (Code)",
+            nuki_door_closed: "Tür geschlossen (1/0/null)",
+            nuki_device_type: "Nuki-Gerätetyp (Code)",
+            nuki_connected: "API / Broker verbunden",
+            nuki_available: "Schloss zur Steuerung bereit",
+            nuki_busy: "Befehl läuft",
+            nuki_accepted: "Befehl übertragen (keine Zustandsbestätigung)",
+            nuki_result: "MQTT-Befehlsergebnis (Code)",
+            nuki_connection: "Nuki-Verbindung",
+            nuki_bridge: "Lokale Nuki Bridge",
+            nuki_mqtt: "Lokales MQTT",
+            nuki_web: "Nuki Web (Cloud)",
+            nuki_id: "Nuki-ID (HTTP: dezimal/0x; MQTT: hex, exakt wie Topic)",
+            nuki_host: "Bridge / MQTT-Broker (Hostname oder IP)",
+            nuki_port: "Port (0 = Standard der Verbindungsart)",
+            nuki_token: "Bridge- oder Nuki-Web-API-Token",
+            nuki_bridge_type: "Bridge-Gerätetyp",
+            nuki_callback: "Bridge-Callback automatisch einrichten",
+            nuki_callback_host: "Callback: lokale HomeServer-IP oder Hostname",
+            nuki_callback_port: "Callback: lokaler Empfangsport",
+            nuki_error_callback_address:
+                "Nuki: Callback-Adresse oder Port ist ungültig",
+            nuki_error_callback_host_missing:
+                "Nuki: Callback-Adresse fehlt; lokale HomeServer-IP eintragen",
+            nuki_error_server_ip_missing:
+                "Nuki: HomeServer-IP fehlt; in den Einstellungen eintragen",
+            nuki_error_server_ip_invalid:
+                "Nuki: HomeServer-IP in den Einstellungen ist ungültig",
+            nuki_error_callback_port:
+                "Nuki: Callback-Port muss zwischen 1 und 65535 liegen",
+            nuki_error_callback_setup:
+                "Nuki: Callback-Einrichtung fehlgeschlagen",
+            nuki_auto: "Automatisch erkennen",
+            nuki_username: "MQTT-Benutzername",
+            nuki_password: "MQTT-Passwort",
+            nuki_tls: "MQTT mit TLS (Broker-Zertifikat prüfen)",
+            nuki_interval: "HTTP-Statusintervall (s, 0 = manuell)",
+            nuki_state_uncalibrated: "Nicht kalibriert",
+            nuki_state_locked: "Abgeschlossen",
+            nuki_state_unlocking: "Wird aufgeschlossen",
+            nuki_state_unlocked: "Aufgeschlossen",
+            nuki_state_locking: "Wird abgeschlossen",
+            nuki_state_unlatched: "Falle zurückgezogen",
+            nuki_state_lng: "Aufgeschlossen (Lock ’n’ Go)",
+            nuki_state_unlatching: "Falle wird zurückgezogen",
+            nuki_state_code_error: "Ungültiger Zugangscode",
+            nuki_state_fingerprint_error: "Ungültiger Fingerabdruck",
+            nuki_state_blocked: "Motor blockiert",
+            nuki_state_unknown: "Unbekannter Schlosszustand",
+            nuki_error_mqtt_library:
+                "Nuki: MQTT-Bibliothek fehlt; Homeserver-Backend aktualisieren",
+            nuki_error_mode: "Nuki: ungültige Verbindungsart",
+            nuki_error_interval:
+                "Nuki: Statusintervall muss 0 oder 30–3600 Sekunden sein",
+            nuki_error_mqtt_id: "Nuki: MQTT-Geräte-ID muss hexadezimal sein",
+            nuki_error_id:
+                "Nuki: Geräte-ID muss dezimal oder hexadezimal mit 0x-Präfix sein",
+            nuki_error_token: "Nuki: API-Token fehlt oder ist ungültig",
+            nuki_error_type: "Nuki: nicht unterstützter Gerätetyp",
+            nuki_error_host: "Nuki: Hostname oder Port ist ungültig",
+            nuki_error_http: "Nuki: HTTP {{code}}",
+            nuki_error_response: "Nuki: ungültige API-Antwort",
+            nuki_error_connection:
+                "Nuki: Verbindung fehlgeschlagen oder Zeitüberschreitung",
+            nuki_error_discovery:
+                "Nuki: Gerät nicht eindeutig gefunden; ID und Gerätetyp prüfen",
+            nuki_error_refresh: "Nuki: Statusabfrage abgelehnt",
+            nuki_error_offline: "Nuki: Schloss nicht erreichbar",
+            nuki_error_bridge_busy:
+                "Nuki: Bridge beschäftigt; Befehl wurde nicht gesendet",
+            nuki_error_busy:
+                "Nuki: Befehl läuft bereits; neues Telegramm verworfen",
+            nuki_error_not_ready:
+                "Nuki: nicht bereit; Befehl wurde nicht gesendet",
+            nuki_error_uncertain:
+                "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
+            nuki_error_command: "Nuki: Befehl abgelehnt",
+            nuki_error_subscribe: "Nuki: MQTT-Abonnement fehlgeschlagen",
+            nuki_error_mqtt:
+                "Nuki: MQTT-Verbindung fehlgeschlagen; Broker und Zugangsdaten prüfen",
+            nuki_error_payload: "Nuki: ungültige MQTT-Nachricht",
+            nuki_error_target: "Nuki: Sollzustand muss 0 oder 1 sein",
+            nuki_error_start: "Nuki: Verbindung konnte nicht gestartet werden",
+            common_device_category: "Geräte",
+            philips_status_query: "Status abfragen",
+            philips_reconnect: "Neu verbinden",
+            philips_error: "Fehler",
+            logic_timer_interval: "interval",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            leica_refresh: "Status abfragen",
+            leica_reconnect: "Neu verbinden",
+            leica_error: "Fehler",
+        },
+        en: {
+            connected: "Connected",
+            set_server_ip_detect: "Auto-detect",
+            nuki_description:
+                "Control and monitor Nuki Smart Locks via a local Bridge, MQTT or Nuki Web.",
+            nuki_unlock: "Unlock",
+            nuki_lock: "Lock",
+            nuki_unlatch: "Unlatch",
+            nuki_device_unlock: "Open according to Nuki configuration",
+            nuki_trigger: "Trigger (0 = unlock, 1 = lock)",
+            nuki_target: "Target state (1 = locked)",
+            nuki_state_code: "Lock state (code)",
+            nuki_state_text: "Lock state (text)",
+            nuki_locked: "Locked (1/0/null)",
+            nuki_battery_critical: "Lock battery critical",
+            nuki_battery_charge: "Lock battery (%)",
+            nuki_battery_charging: "Lock battery charging",
+            nuki_keypad_battery: "Keypad battery critical",
+            nuki_door_battery: "Door sensor battery critical",
+            nuki_door_state: "Door sensor state (code)",
+            nuki_door_closed: "Door closed (1/0/null)",
+            nuki_device_type: "Nuki device type (code)",
+            nuki_connected: "API / broker connected",
+            nuki_available: "Lock ready for control",
+            nuki_busy: "Command in progress",
+            nuki_accepted: "Command transmitted (no state confirmation)",
+            nuki_result: "MQTT command result (code)",
+            nuki_connection: "Nuki connection",
+            nuki_bridge: "Local Nuki Bridge",
+            nuki_mqtt: "Local MQTT",
+            nuki_web: "Nuki Web (cloud)",
+            nuki_id:
+                "Nuki ID (HTTP: decimal/0x; MQTT: hex, exactly as in topic)",
+            nuki_host: "Bridge / MQTT broker (hostname or IP)",
+            nuki_port: "Port (0 = connection default)",
+            nuki_token: "Bridge or Nuki Web API token",
+            nuki_bridge_type: "Bridge device type",
+            nuki_callback: "Automatically register bridge callback",
+            nuki_callback_host: "Callback: local HomeServer IP or hostname",
+            nuki_callback_port: "Callback: local receiving port",
+            nuki_error_callback_address:
+                "Nuki: invalid callback address or port",
+            nuki_error_callback_host_missing:
+                "Nuki: callback address missing; enter the local HomeServer IP",
+            nuki_error_server_ip_missing:
+                "Nuki: HomeServer IP missing; enter it in settings",
+            nuki_error_server_ip_invalid:
+                "Nuki: invalid HomeServer IP in settings",
+            nuki_error_callback_port:
+                "Nuki: callback port must be between 1 and 65535",
+            nuki_error_callback_setup: "Nuki: callback setup failed",
+            nuki_auto: "Detect automatically",
+            nuki_username: "MQTT username",
+            nuki_password: "MQTT password",
+            nuki_tls: "MQTT with TLS (verify broker certificate)",
+            nuki_interval: "HTTP status interval (s, 0 = manual)",
+            nuki_state_uncalibrated: "Uncalibrated",
+            nuki_state_locked: "Locked",
+            nuki_state_unlocking: "Unlocking",
+            nuki_state_unlocked: "Unlocked",
+            nuki_state_locking: "Locking",
+            nuki_state_unlatched: "Unlatched",
+            nuki_state_lng: "Unlocked (Lock ’n’ Go)",
+            nuki_state_unlatching: "Unlatching",
+            nuki_state_code_error: "Invalid entry code",
+            nuki_state_fingerprint_error: "Invalid fingerprint",
+            nuki_state_blocked: "Motor blocked",
+            nuki_state_unknown: "Unknown lock state",
+            nuki_error_mqtt_library:
+                "Nuki: MQTT library missing; update the homeserver backend",
+            nuki_error_mode: "Nuki: invalid connection type",
+            nuki_error_interval:
+                "Nuki: status interval must be 0 or 30–3600 seconds",
+            nuki_error_mqtt_id: "Nuki: MQTT device ID must be hexadecimal",
+            nuki_error_id:
+                "Nuki: device ID must be decimal or hexadecimal with a 0x prefix",
+            nuki_error_token: "Nuki: API token missing or invalid",
+            nuki_error_type: "Nuki: unsupported device type",
+            nuki_error_host: "Nuki: invalid hostname or port",
+            nuki_error_http: "Nuki: HTTP {{code}}",
+            nuki_error_response: "Nuki: invalid API response",
+            nuki_error_connection: "Nuki: connection failed or timed out",
+            nuki_error_discovery:
+                "Nuki: device not uniquely identified; check ID and device type",
+            nuki_error_refresh: "Nuki: status request rejected",
+            nuki_error_offline: "Nuki: lock unreachable",
+            nuki_error_bridge_busy: "Nuki: bridge busy; command was not sent",
+            nuki_error_busy:
+                "Nuki: command already in progress; new telegram discarded",
+            nuki_error_not_ready: "Nuki: not ready; command was not sent",
+            nuki_error_uncertain:
+                "Nuki: command outcome unknown; check lock state before sending again",
+            nuki_error_command: "Nuki: command rejected",
+            nuki_error_subscribe: "Nuki: MQTT subscription failed",
+            nuki_error_mqtt:
+                "Nuki: MQTT connection failed; check broker and credentials",
+            nuki_error_payload: "Nuki: invalid MQTT message",
+            nuki_error_target: "Nuki: target state must be 0 or 1",
+            nuki_error_start: "Nuki: connection could not be started",
+            common_device_category: "Devices",
+            philips_status_query: "Query status",
+            philips_reconnect: "Reconnect",
+            philips_error: "Error",
+            logic_timer_interval: "Interval",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            leica_refresh: "Request status",
+            leica_reconnect: "Reconnect",
+            leica_error: "Error",
+        },
+    },
+    type: "nuki",
+    label: "Nuki",
+    category: "Geräte",
+    color: "#f97316",
     description:
-        'Nuki Smart Locks über lokale Bridge, MQTT oder Nuki Web steuern und überwachen.',
+        "Nuki Smart Locks über lokale Bridge, MQTT oder Nuki Web steuern und überwachen.",
     inputs: [
-        { handle: 'unlock', label: 'Aufschließen' },
-        { handle: 'lock', label: 'Abschließen' },
-        { handle: 'unlatch', label: 'Falle zurückziehen' },
-        { handle: 'deviceUnlock', label: 'Öffnen gemäß Nuki-Konfiguration' },
-        { handle: 'trigger', label: 'Trigger (0 = auf, 1 = zu)' },
-        { handle: 'locked', label: 'Sollzustand (1 = abgeschlossen)' },
-        { handle: 'refresh', label: 'Status abfragen' },
-        { handle: 'reconnect', label: 'Neu verbinden' },
+        { handle: "unlock", label: "Aufschließen" },
+        { handle: "lock", label: "Abschließen" },
+        { handle: "unlatch", label: "Falle zurückziehen" },
+        { handle: "deviceUnlock", label: "Öffnen gemäß Nuki-Konfiguration" },
+        { handle: "trigger", label: "Trigger (0 = auf, 1 = zu)" },
+        { handle: "locked", label: "Sollzustand (1 = abgeschlossen)" },
+        { handle: "refresh", label: "Status abfragen" },
+        { handle: "reconnect", label: "Neu verbinden" },
     ],
     outputs: [
-        { handle: 'state', label: 'Schlosszustand (Code)' },
-        { handle: 'stateText', label: 'Schlosszustand (Text)' },
-        { handle: 'locked', label: 'Abgeschlossen (1/0/null)' },
-        { handle: 'batteryCritical', label: 'Schlossbatterie kritisch' },
-        { handle: 'batteryCharge', label: 'Schlossbatterie (%)' },
-        { handle: 'batteryCharging', label: 'Schlossbatterie lädt' },
-        { handle: 'keypadBatteryCritical', label: 'Keypad-Batterie kritisch' },
+        { handle: "state", label: "Schlosszustand (Code)" },
+        { handle: "stateText", label: "Schlosszustand (Text)" },
+        { handle: "locked", label: "Abgeschlossen (1/0/null)" },
+        { handle: "batteryCritical", label: "Schlossbatterie kritisch" },
+        { handle: "batteryCharge", label: "Schlossbatterie (%)" },
+        { handle: "batteryCharging", label: "Schlossbatterie lädt" },
+        { handle: "keypadBatteryCritical", label: "Keypad-Batterie kritisch" },
         {
-            handle: 'doorsensorBatteryCritical',
-            label: 'Türsensor-Batterie kritisch',
+            handle: "doorsensorBatteryCritical",
+            label: "Türsensor-Batterie kritisch",
         },
-        { handle: 'doorState', label: 'Türsensorzustand (Code)' },
-        { handle: 'doorClosed', label: 'Tür geschlossen (1/0/null)' },
-        { handle: 'deviceType', label: 'Nuki-Gerätetyp (Code)' },
-        { handle: 'connected', label: 'API / Broker verbunden' },
-        { handle: 'available', label: 'Schloss zur Steuerung bereit' },
-        { handle: 'busy', label: 'Befehl läuft' },
+        { handle: "doorState", label: "Türsensorzustand (Code)" },
+        { handle: "doorClosed", label: "Tür geschlossen (1/0/null)" },
+        { handle: "deviceType", label: "Nuki-Gerätetyp (Code)" },
+        { handle: "connected", label: "API / Broker verbunden" },
+        { handle: "available", label: "Schloss zur Steuerung bereit" },
+        { handle: "busy", label: "Befehl läuft" },
         {
-            handle: 'commandAccepted',
-            label: 'Befehl übertragen (keine Zustandsbestätigung)',
+            handle: "commandAccepted",
+            label: "Befehl übertragen (keine Zustandsbestätigung)",
         },
-        { handle: 'commandResult', label: 'MQTT-Befehlsergebnis (Code)' },
-        { handle: 'error', label: 'Fehler' },
+        { handle: "commandResult", label: "MQTT-Befehlsergebnis (Code)" },
+        { handle: "error", label: "Fehler" },
     ],
     config: [
         {
-            key: 'mode',
-            label: 'Nuki-Verbindung',
-            type: 'select',
-            default: 'bridge',
+            key: "mode",
+            label: "Nuki-Verbindung",
+            type: "select",
+            default: "bridge",
             options: [
-                { value: 'bridge', label: 'Lokale Nuki Bridge' },
-                { value: 'mqtt', label: 'Lokales MQTT' },
-                { value: 'web', label: 'Nuki Web (Cloud)' },
+                { value: "bridge", label: "Lokale Nuki Bridge" },
+                { value: "mqtt", label: "Lokales MQTT" },
+                { value: "web", label: "Nuki Web (Cloud)" },
             ],
         },
         {
-            key: 'deviceId',
-            label: 'Nuki-ID (HTTP: dezimal/0x; MQTT: hex, exakt wie Topic)',
-            type: 'text',
+            key: "deviceId",
+            label: "Nuki-ID (HTTP: dezimal/0x; MQTT: hex, exakt wie Topic)",
+            type: "text",
         },
         {
-            key: 'host',
-            visibleWhen: { mode: ['bridge', 'mqtt'] },
-            label: 'Bridge / MQTT-Broker (Hostname oder IP)',
-            type: 'text',
+            key: "host",
+            visibleWhen: { mode: ["bridge", "mqtt"] },
+            label: "Bridge / MQTT-Broker (Hostname oder IP)",
+            type: "text",
         },
         {
-            key: 'port',
-            visibleWhen: { mode: ['bridge', 'mqtt'] },
-            label: 'Port (0 = Standard der Verbindungsart)',
-            type: 'number',
+            key: "port",
+            visibleWhen: { mode: ["bridge", "mqtt"] },
+            label: "Port (0 = Standard der Verbindungsart)",
+            type: "number",
             default: 0,
         },
         {
-            key: 'token',
-            visibleWhen: { mode: ['bridge', 'web'] },
-            label: 'Bridge- oder Nuki-Web-API-Token',
-            type: 'password',
+            key: "token",
+            visibleWhen: { mode: ["bridge", "web"] },
+            label: "Bridge- oder Nuki-Web-API-Token",
+            type: "password",
         },
         {
-            key: 'deviceType',
-            visibleWhen: { mode: ['bridge'] },
-            label: 'Bridge-Gerätetyp',
-            type: 'select',
-            default: 'auto',
+            key: "deviceType",
+            visibleWhen: { mode: ["bridge"] },
+            label: "Bridge-Gerätetyp",
+            type: "select",
+            default: "auto",
             options: [
-                { value: 'auto', label: 'Automatisch erkennen' },
-                { value: '0', label: 'Smart Lock 1 / 2' },
-                { value: '4', label: 'Smart Lock 3 / 4' },
-                { value: '5', label: 'Smart Lock 5 / Go / Pro / Ultra' },
-                { value: '3', label: 'Smart Door' },
+                { value: "auto", label: "Automatisch erkennen" },
+                { value: "0", label: "Smart Lock 1 / 2" },
+                { value: "4", label: "Smart Lock 3 / 4" },
+                { value: "5", label: "Smart Lock 5 / Go / Pro / Ultra" },
+                { value: "3", label: "Smart Door" },
             ],
         },
         {
-            key: 'callback',
-            visibleWhen: { mode: ['bridge'] },
-            label: 'Bridge-Callback automatisch einrichten',
-            type: 'checkbox',
+            key: "callback",
+            visibleWhen: { mode: ["bridge"] },
+            label: "Bridge-Callback automatisch einrichten",
+            type: "checkbox",
             default: false,
         },
         {
-            key: 'callbackPort',
-            visibleWhen: { mode: ['bridge'], callback: [true, 1, '1', 'true'] },
-            label: 'Callback: lokaler Empfangsport',
-            type: 'number',
+            key: "callbackPort",
+            visibleWhen: { mode: ["bridge"], callback: [true, 1, "1", "true"] },
+            label: "Callback: lokaler Empfangsport",
+            type: "number",
             default: 8099,
         },
         {
-            key: 'username',
-            visibleWhen: { mode: ['mqtt'] },
-            label: 'MQTT-Benutzername',
-            type: 'text',
+            key: "username",
+            visibleWhen: { mode: ["mqtt"] },
+            label: "MQTT-Benutzername",
+            type: "text",
         },
         {
-            key: 'password',
-            visibleWhen: { mode: ['mqtt'] },
-            label: 'MQTT-Passwort',
-            type: 'password',
+            key: "password",
+            visibleWhen: { mode: ["mqtt"] },
+            label: "MQTT-Passwort",
+            type: "password",
         },
         {
-            key: 'mqttTLS',
-            visibleWhen: { mode: ['mqtt'] },
-            label: 'MQTT mit TLS (Broker-Zertifikat prüfen)',
-            type: 'checkbox',
+            key: "mqttTLS",
+            visibleWhen: { mode: ["mqtt"] },
+            label: "MQTT mit TLS (Broker-Zertifikat prüfen)",
+            type: "checkbox",
             default: false,
         },
         {
-            key: 'interval',
-            visibleWhen: { mode: ['bridge', 'web'] },
-            label: 'HTTP-Statusintervall (s, 0 = manuell)',
-            type: 'number',
+            key: "interval",
+            visibleWhen: { mode: ["bridge", "web"] },
+            label: "HTTP-Statusintervall (s, 0 = manuell)",
+            type: "number",
             default: 60,
         },
     ],
@@ -1099,7 +1324,7 @@ module.exports = {
         try {
             const cfg = options(data, context);
             const restart =
-                context.triggerHandle === 'reconnect' && on(inputs.reconnect);
+                context.triggerHandle === "reconnect" && on(inputs.reconnect);
             if (
                 !s ||
                 JSON.stringify(cfg) !== JSON.stringify(s.cfg) ||
@@ -1112,10 +1337,10 @@ module.exports = {
             const handle = context.triggerHandle;
             // Only the actual telegram may act; ignore all cached input values at startup/reconnect.
             let action;
-            if (handle === 'locked' || handle === 'trigger') {
+            if (handle === "locked" || handle === "trigger") {
                 const value = boolean(inputs[handle]);
                 if (value === undefined) {
-                    s.fail('Nuki: Sollzustand muss 0 oder 1 sein');
+                    s.fail("Nuki: Sollzustand muss 0 oder 1 sein");
                     return {};
                 }
                 action = value ? 2 : 1;
@@ -1124,32 +1349,32 @@ module.exports = {
                     unlock: 1,
                     lock: 2,
                     unlatch: 3,
-                    deviceUnlock: 'unlock',
+                    deviceUnlock: "unlock",
                 }[handle];
-                if (handle === 'refresh' && cfg.mode !== 'mqtt') read(s, true);
+                if (handle === "refresh" && cfg.mode !== "mqtt") read(s, true);
             }
             if (action !== undefined)
                 command(s, action).catch(() => {
                     if (!s.active()) return;
                     finish(s);
                     s.fail(
-                        'Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen',
+                        "Nuki: Befehlsausgang unklar; Schlosszustand vor erneutem Senden prüfen",
                     );
                 });
         } catch (err) {
             close(id);
             context.setNodeStatus?.(false);
-            context.emitOutput('connected', false);
-            context.emitOutput('available', false);
-            context.emitOutput('busy', false);
-            context.emitOutput('commandAccepted', false);
+            context.emitOutput("connected", false);
+            context.emitOutput("available", false);
+            context.emitOutput("busy", false);
+            context.emitOutput("commandAccepted", false);
             context.emitOutput(
-                'error',
-                err.message.startsWith('Nuki:')
+                "error",
+                err.message.startsWith("Nuki:")
                     ? err.message
-                    : 'Nuki: Verbindung konnte nicht gestartet werden',
+                    : "Nuki: Verbindung konnte nicht gestartet werden",
             );
-            context.warn('Nuki: Verbindung konnte nicht gestartet werden');
+            context.warn("Nuki: Verbindung konnte nicht gestartet werden");
         }
         return {};
     },

@@ -1,6 +1,6 @@
 /**
  * @plugin Magnetar
- * @version 1.0.1
+ * @version 1.0.2
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -286,6 +286,156 @@ function commandFor(handle, value) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            magnetar_description:
+                "Magnetar Blu-ray-Player über TCP steuern; Befehlsbestätigung ohne Gerätestatus",
+            magnetar_play: "Wiedergabe (Trigger)",
+            magnetar_pause: "Pause (Trigger)",
+            magnetar_stop: "Stopp (Trigger)",
+            magnetar_next: "Nächstes Kapitel (Trigger)",
+            magnetar_previous: "Vorheriges Kapitel (Trigger)",
+            magnetar_forward: "Vorlauf (Trigger)",
+            magnetar_rewind: "Rücklauf (Trigger)",
+            magnetar_eject: "Disc-Lade öffnen/schließen (Trigger)",
+            magnetar_home: "Hauptmenü (Trigger)",
+            magnetar_menu: "Disc-Menü (Trigger)",
+            magnetar_popup: "Popup-Menü (Trigger)",
+            magnetar_up: "Nach oben (Trigger)",
+            magnetar_down: "Nach unten (Trigger)",
+            magnetar_left: "Nach links (Trigger)",
+            magnetar_right: "Nach rechts (Trigger)",
+            magnetar_enter: "Bestätigen (Trigger)",
+            magnetar_back: "Zurück (Trigger)",
+            magnetar_audio: "Tonspur wechseln (Trigger)",
+            magnetar_subtitle: "Untertitel wechseln (Trigger)",
+            magnetar_command: "Fernbedienungscode (z. B. RED, NU1, SET)",
+            magnetar_connected: "TCP-Verbindung (1/0)",
+            magnetar_ack: "Bestätigter Befehl (Code)",
+            magnetar_timeout: "Antwortzeitlimit in Sekunden (1–30)",
+            magnetar_wake: "Wake-on-LAN (Trigger)",
+            magnetar_wake_status: "Wake-on-LAN-Sendestatus",
+            magnetar_wake_mac_missing:
+                "Magnetar: Zum Aufwecken MAC-Adresse eintragen",
+            magnetar_wake_invalid:
+                "Magnetar: MAC-Adresse oder Broadcast-Adresse ungültig",
+            magnetar_wake_failed:
+                "Magnetar: Wake-on-LAN konnte nicht gesendet werden",
+            magnetar_wake_sent:
+                "Magnetar: Wake-on-LAN gesendet; Einschalten unbestätigt",
+            magnetar_no_ack:
+                "Magnetar: Keine Befehlsbestätigung; Ausführung unbekannt",
+            magnetar_send_failed:
+                "Magnetar: Senden fehlgeschlagen; Ausführung unbekannt",
+            magnetar_connect_failed:
+                "Magnetar: Verbindungsaufbau fehlgeschlagen",
+            magnetar_invalid_response: "Magnetar: Ungültige Geräteantwort",
+            magnetar_network_error:
+                "Magnetar: Netzwerkfehler; Ausführung unbekannt",
+            magnetar_discarded:
+                "Magnetar: Verbindung unterbrochen; ausstehende Befehle verworfen",
+            magnetar_retry:
+                "Magnetar: Verbindung unterbrochen; erneuter Verbindungsversuch folgt",
+            magnetar_invalid_config:
+                "Magnetar: IP-Adresse, Port oder Zeitlimit ungültig",
+            magnetar_invalid_power: "Magnetar: Ein/Aus erwartet 0 oder 1",
+            magnetar_invalid_command:
+                "Magnetar: Unbekannter Fernbedienungscode",
+            magnetar_offline: "Magnetar: Nicht verbunden; Befehl verworfen",
+            magnetar_queue_full:
+                "Magnetar: Befehlswarteschlange voll; Befehl verworfen",
+            lyngdorf_ip: "IP-Adresse",
+            lyngdorf_volume_down: "Leiser (Trigger)",
+            lyngdorf_volume_up: "Lauter (Trigger)",
+            lyngdorf_port: "TCP-Port",
+            lyngdorf_mute_toggle: "Stumm umschalten (Trigger)",
+            ui_verwaltet: " verwaltet",
+            common_device_category: "Geräte",
+            philips_power: "Ein/Aus (1/0)",
+            philips_reconnect: "Neu verbinden",
+            philips_error: "Fehler",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            leica_power_input: "Ein/Aus (1/0)",
+            leica_reconnect: "Neu verbinden",
+            leica_error: "Fehler",
+            leica_mac: "MAC-Adresse (Wake-on-LAN)",
+            leica_broadcast: "Wake-on-LAN Broadcast-Adresse",
+        },
+        en: {
+            connected: "Connected",
+            magnetar_description:
+                "Control a Magnetar Blu-ray player over TCP; command acknowledgement without device status",
+            magnetar_play: "Play (trigger)",
+            magnetar_pause: "Pause (trigger)",
+            magnetar_stop: "Stop (trigger)",
+            magnetar_next: "Next chapter (trigger)",
+            magnetar_previous: "Previous chapter (trigger)",
+            magnetar_forward: "Fast forward (trigger)",
+            magnetar_rewind: "Rewind (trigger)",
+            magnetar_eject: "Open/close disc tray (trigger)",
+            magnetar_home: "Home menu (trigger)",
+            magnetar_menu: "Disc menu (trigger)",
+            magnetar_popup: "Popup menu (trigger)",
+            magnetar_up: "Up (trigger)",
+            magnetar_down: "Down (trigger)",
+            magnetar_left: "Left (trigger)",
+            magnetar_right: "Right (trigger)",
+            magnetar_enter: "Confirm (trigger)",
+            magnetar_back: "Back (trigger)",
+            magnetar_audio: "Change audio track (trigger)",
+            magnetar_subtitle: "Change subtitles (trigger)",
+            magnetar_command: "Remote control code (e.g. RED, NU1, SET)",
+            magnetar_connected: "TCP connection (1/0)",
+            magnetar_ack: "Acknowledged command (code)",
+            magnetar_timeout: "Response timeout in seconds (1–30)",
+            magnetar_wake: "Wake-on-LAN (trigger)",
+            magnetar_wake_status: "Wake-on-LAN send status",
+            magnetar_wake_mac_missing:
+                "Magnetar: enter a MAC address to wake the player",
+            magnetar_wake_invalid:
+                "Magnetar: invalid MAC address or broadcast address",
+            magnetar_wake_failed: "Magnetar: could not send Wake-on-LAN",
+            magnetar_wake_sent:
+                "Magnetar: Wake-on-LAN sent; power on unconfirmed",
+            magnetar_no_ack:
+                "Magnetar: no command acknowledgement; execution unknown",
+            magnetar_send_failed: "Magnetar: sending failed; execution unknown",
+            magnetar_connect_failed: "Magnetar: connection failed",
+            magnetar_invalid_response: "Magnetar: invalid device response",
+            magnetar_network_error:
+                "Magnetar: network error; execution unknown",
+            magnetar_discarded:
+                "Magnetar: connection lost; pending commands discarded",
+            magnetar_retry:
+                "Magnetar: connection lost; reconnection will follow",
+            magnetar_invalid_config:
+                "Magnetar: invalid IP address, port or timeout",
+            magnetar_invalid_power: "Magnetar: power requires 0 or 1",
+            magnetar_invalid_command: "Magnetar: unknown remote control code",
+            magnetar_offline: "Magnetar: not connected; command discarded",
+            magnetar_queue_full:
+                "Magnetar: command queue full; command discarded",
+            lyngdorf_ip: "IP address",
+            lyngdorf_volume_down: "Volume down (trigger)",
+            lyngdorf_volume_up: "Volume up (trigger)",
+            lyngdorf_port: "TCP port",
+            lyngdorf_mute_toggle: "Toggle mute (trigger)",
+            ui_verwaltet: " ",
+            common_device_category: "Devices",
+            philips_power: "On/off (1/0)",
+            philips_reconnect: "Reconnect",
+            philips_error: "Error",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            leica_power_input: "Power (1/0)",
+            leica_reconnect: "Reconnect",
+            leica_error: "Error",
+            leica_mac: "MAC address (Wake-on-LAN)",
+            leica_broadcast: "Wake-on-LAN broadcast address",
+        },
+    },
     type: "magnetar",
     label: "Magnetar",
     category: "Geräte",

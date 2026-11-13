@@ -1,6 +1,6 @@
 /**
  * @plugin Leica Cine 1
- * @version 1.0.4
+ * @version 1.0.5
  * @author Christian Brauwers
  * @website https://www.kaenix.net
  *
@@ -664,6 +664,193 @@ function command(s, inputs, data, handle) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            connected: "Verbunden",
+            queue_status: "Status",
+            ui_status: "Status",
+            common_device_category: "Geräte",
+            philips_power: "Ein/Aus (1/0)",
+            philips_status_query: "Status abfragen",
+            philips_reconnect: "Neu verbinden",
+            philips_error: "Fehler",
+            logic_convert_number: "number",
+            logic_convert_string: "string",
+            leica_description_current:
+                "Leica Cine 1: Ein/Aus und Quellenwahl über VIDAA (Steuerung noch nicht vollständig am Gerät geprüft)",
+            leica_mqtt_missing: "Leica: MQTT-Bibliothek fehlt",
+            leica_ip_invalid: "Leica: Gültige IPv4-Adresse erforderlich",
+            leica_port_invalid: "Leica: Ungültiger MQTT-Port",
+            leica_broadcast_invalid: "Leica: Ungültige Broadcast-Adresse",
+            leica_mac_invalid: "Leica: Ungültige MAC-Adresse",
+            leica_cert_pair:
+                "Leica: Client-Zertifikat und Schlüssel gemeinsam eintragen",
+            leica_transport_invalid: "Leica: Ungültiger Transport",
+            leica_client_invalid: "Leica: Ungültige Client-ID",
+            leica_disconnected_command:
+                "Leica: Nicht verbunden; Befehl nicht gesendet",
+            leica_send_failed: "Leica: Senden fehlgeschlagen",
+            leica_stale: "Leica: Keine aktuelle Geräterückmeldung",
+            leica_disconnected:
+                "Leica: Nicht verbunden; Betriebszustand unbekannt",
+            leica_subscribe_failed: "Leica: MQTT-Abonnement abgelehnt",
+            leica_waiting_state: "Leica: Verbunden; warte auf Gerätestatus",
+            leica_pin_required: "Leica: PIN am Gerät ablesen und koppeln",
+            leica_busy:
+                "Leica: Fernbedienungsverbindung belegt; andere App schließen",
+            leica_pair_closed:
+                "Leica: PIN-Kopplung beendet; erneut Status abfragen",
+            leica_invalid_response: "Leica: Ungültige Geräteantwort",
+            leica_paired: "Leica: PIN-Kopplung erfolgreich",
+            leica_pin_rejected: "Leica: PIN falsch oder abgelaufen",
+            leica_source_confirmed: "Leica: Quelle durch Gerät bestätigt",
+            leica_state_received: "Leica: Gerätestatus empfangen",
+            leica_connection_failed:
+                "Leica: MQTT-Verbindung fehlgeschlagen; Transport und Zertifikate prüfen",
+            leica_client_certificate_required:
+                "Leica: Gerät verlangt ein Client-Zertifikat; kompatibles PEM-Zertifikat und Schlüssel eintragen",
+            leica_client_certificate_rejected:
+                "Leica: Gerät hat das Client-Zertifikat abgelehnt; Zertifikat und Schlüssel prüfen",
+            leica_mac_required: "Leica: Zum Einschalten MAC-Adresse eintragen",
+            leica_wol_failed: "Leica: Wake-on-LAN konnte nicht gesendet werden",
+            leica_wake_command_sent:
+                "Leica: Aufweckbefehl gesendet; warte auf Gerätestatus",
+            leica_power_state_output:
+                "Betrieb (1 = ein, 0 = Standby, null = unbekannt)",
+            leica_wol_sent:
+                "Leica: Wake-on-LAN gesendet; Einschalten unbestätigt",
+            leica_power_invalid: "Leica: Ein/Aus erwartet 0 oder 1",
+            leica_off_unknown:
+                "Leica: Ausschalten benötigt aktuellen eingeschalteten Gerätestatus",
+            leica_off_sent:
+                "Leica: Ausschaltbefehl gesendet; Ausschalten unbestätigt",
+            leica_source_unknown:
+                "Leica: Quelle unbekannt; Quellenliste oder numerische Quellen-ID verwenden",
+            leica_source_sent:
+                "Leica: Quellenbefehl gesendet; warte auf Bestätigung",
+            leica_source_timeout:
+                "Leica: Quellenwechsel vom Gerät nicht bestätigt",
+            leica_pin_invalid: "Leica: Vierstellige PIN eintragen",
+            leica_description:
+                "Leica Cine 1: Ein/Aus und Quellenwahl über VIDAA (experimentell, am Gerät ungeprüft)",
+            leica_start_failed:
+                "Leica: Verbindung konnte nicht gestartet werden",
+            leica_power_input: "Ein/Aus (1/0)",
+            leica_source_input: "Quelle (Name oder ID)",
+            leica_select_source: "Konfigurierte Quelle wählen",
+            leica_pair: "PIN-Kopplung bestätigen",
+            leica_refresh: "Status abfragen",
+            leica_reconnect: "Neu verbinden",
+            leica_connected: "Geräteverbindung (1/0)",
+            leica_is_on_output: "Beamer eingeschaltet (1/0)",
+            leica_power_valid_output: "Betriebsstatus gültig (1/0)",
+            leica_power_output: "Betrieb (1 = bestätigt, null = unbekannt)",
+            leica_source_output: "Aktive Quellen-ID",
+            leica_sources: "Verfügbare Quellen",
+            leica_status: "Status",
+            leica_error: "Fehler",
+            leica_ip: "Projektor-IP",
+            leica_mac: "MAC-Adresse (Wake-on-LAN)",
+            leica_broadcast: "Wake-on-LAN Broadcast-Adresse",
+            leica_transport: "MQTT-Transport",
+            leica_plaintext: "Unverschlüsselt (lokales Netz)",
+            leica_port: "MQTT-Port",
+            leica_verify_tls: "TLS-Zertifikat prüfen",
+            leica_client_id: "VIDAA Client-ID (leer = automatisch)",
+            leica_cert: "Client-Zertifikat (PEM, optional)",
+            leica_key: "Client-Schlüssel (PEM, optional)",
+            leica_pin: "Kopplungs-PIN (vierstellig)",
+        },
+        en: {
+            connected: "Connected",
+            queue_status: "Status",
+            ui_status: "Status",
+            common_device_category: "Devices",
+            philips_power: "On/off (1/0)",
+            philips_status_query: "Query status",
+            philips_reconnect: "Reconnect",
+            philips_error: "Error",
+            logic_convert_number: "Number",
+            logic_convert_string: "Text",
+            leica_description_current:
+                "Leica Cine 1: power and source selection via VIDAA (device control not yet fully tested)",
+            leica_mqtt_missing: "Leica: MQTT library missing",
+            leica_ip_invalid: "Leica: valid IPv4 address required",
+            leica_port_invalid: "Leica: invalid MQTT port",
+            leica_broadcast_invalid: "Leica: invalid broadcast address",
+            leica_mac_invalid: "Leica: invalid MAC address",
+            leica_cert_pair: "Leica: enter both client certificate and key",
+            leica_transport_invalid: "Leica: invalid transport",
+            leica_client_invalid: "Leica: invalid client ID",
+            leica_disconnected_command: "Leica: disconnected; command not sent",
+            leica_send_failed: "Leica: sending failed",
+            leica_stale: "Leica: no recent device feedback",
+            leica_disconnected: "Leica: disconnected; power state unknown",
+            leica_subscribe_failed: "Leica: MQTT subscription rejected",
+            leica_waiting_state: "Leica: connected; waiting for device state",
+            leica_pin_required: "Leica: read the PIN on the device and pair",
+            leica_busy: "Leica: remote connection busy; close the other app",
+            leica_pair_closed: "Leica: PIN pairing closed; request state again",
+            leica_invalid_response: "Leica: invalid device response",
+            leica_paired: "Leica: PIN pairing successful",
+            leica_pin_rejected: "Leica: PIN incorrect or expired",
+            leica_source_confirmed: "Leica: source confirmed by device",
+            leica_state_received: "Leica: device state received",
+            leica_connection_failed:
+                "Leica: MQTT connection failed; check transport and certificates",
+            leica_client_certificate_required:
+                "Leica: device requires a client certificate; enter a compatible PEM certificate and key",
+            leica_client_certificate_rejected:
+                "Leica: device rejected the client certificate; check certificate and key",
+            leica_mac_required: "Leica: enter MAC address to power on",
+            leica_wol_failed: "Leica: Wake-on-LAN could not be sent",
+            leica_wake_command_sent:
+                "Leica: wake command sent; waiting for device state",
+            leica_power_state_output:
+                "Power (1 = on, 0 = standby, null = unknown)",
+            leica_wol_sent: "Leica: Wake-on-LAN sent; power on unconfirmed",
+            leica_power_invalid: "Leica: power expects 0 or 1",
+            leica_off_unknown:
+                "Leica: power off requires recent confirmation that the device is on",
+            leica_off_sent:
+                "Leica: power off command sent; power off unconfirmed",
+            leica_source_unknown:
+                "Leica: unknown source; use the source list or numeric source ID",
+            leica_source_sent:
+                "Leica: source command sent; waiting for confirmation",
+            leica_source_timeout:
+                "Leica: source change not confirmed by device",
+            leica_pin_invalid: "Leica: enter four-digit PIN",
+            leica_description:
+                "Leica Cine 1: power and source selection via VIDAA (experimental, untested on device)",
+            leica_start_failed: "Leica: connection could not be started",
+            leica_power_input: "Power (1/0)",
+            leica_source_input: "Source (name or ID)",
+            leica_select_source: "Select configured source",
+            leica_pair: "Confirm PIN pairing",
+            leica_refresh: "Request status",
+            leica_reconnect: "Reconnect",
+            leica_connected: "Device connection (1/0)",
+            leica_is_on_output: "Projector on (1/0)",
+            leica_power_valid_output: "Power state valid (1/0)",
+            leica_power_output: "Power (1 = confirmed, null = unknown)",
+            leica_source_output: "Active source ID",
+            leica_sources: "Available sources",
+            leica_status: "Status",
+            leica_error: "Error",
+            leica_ip: "Projector IP",
+            leica_mac: "MAC address (Wake-on-LAN)",
+            leica_broadcast: "Wake-on-LAN broadcast address",
+            leica_transport: "MQTT transport",
+            leica_plaintext: "Unencrypted (local network)",
+            leica_port: "MQTT port",
+            leica_verify_tls: "Verify TLS certificate",
+            leica_client_id: "VIDAA client ID (empty = automatic)",
+            leica_cert: "Client certificate (PEM, optional)",
+            leica_key: "Client key (PEM, optional)",
+            leica_pin: "Pairing PIN (four digits)",
+        },
+    },
     type: "leica-cine1",
     label: "Leica Cine 1",
     category: "Geräte",

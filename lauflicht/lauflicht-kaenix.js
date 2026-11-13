@@ -1,6 +1,6 @@
 /**
  * @plugin    Lauflicht
- * @version   1.0.1
+ * @version   1.0.2
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -29,6 +29,14 @@ function cancelRunning(nodeId) {
 }
 
 module.exports = {
+    translations: {
+        de: {
+            logic_convert_number: "number",
+        },
+        en: {
+            logic_convert_number: "Number",
+        },
+    },
     type: "lauflicht",
     category: "Automatisierung",
     label: "Lauflicht",
