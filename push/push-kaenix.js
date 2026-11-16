@@ -1,6 +1,6 @@
 /**
  * @plugin    Push
- * @version   1.0.5
+ * @version   1.0.6
  * @author    Christian Brauwers
  * @email     christian@brauwers.com
  * @website   https://www.kaenix.net
@@ -12,6 +12,9 @@ const lastSentAt = new WeakMap();
 module.exports = {
     translations: {
         de: {
+            push_trigger: "Trigger",
+            push_value: "Wert",
+            push_text: "Text ({{value}} als Platzhalter)",
             push_cooldown_seconds: "Sperrzeit (Sekunden, 0 = aus)",
             native_value: "Wert",
             sch_widget_value: "Wert",
@@ -26,6 +29,9 @@ module.exports = {
             history_value_axis: "Wert",
         },
         en: {
+            push_trigger: "Trigger",
+            push_value: "Value",
+            push_text: "Text ({{value}} as placeholder)",
             push_cooldown_seconds: "Cooldown (seconds, 0 = off)",
             native_value: "Value",
             sch_widget_value: "Value",
@@ -46,7 +52,10 @@ module.exports = {
     description: "Sendet Web Push an alle Geräte oder ein bestimmtes Gerät",
     color: "#f97316",
 
-    inputs: [{ handle: "in", label: "Wert" }],
+    inputs: [
+        { handle: "in", label: "push_trigger", type: "boolean" },
+        { handle: "value", label: "push_value" },
+    ],
     outputs: [],
 
     config: [
@@ -57,7 +66,7 @@ module.exports = {
             options: ["all"],
         },
         { key: "title", label: "Titel", type: "text" },
-        { key: "text", label: "Text ({value} als Platzhalter)", type: "text" },
+        { key: "text", label: "push_text", type: "text" },
         { key: "icon", label: "Icon-URL (optional)", type: "text" },
         { key: "url", label: "URL beim Klick", type: "text" },
         {
@@ -72,11 +81,11 @@ module.exports = {
     execute(inputs, data, context) {
         // Engine startup/reload initializes plugins without a real input event.
         if (
-            context.triggerHandle === "_config" ||
+            context.triggerHandle !== "in" ||
             ![true, 1, "1"].includes(inputs.in)
         )
             return {};
-        const value = inputs.in;
+        const value = inputs.value;
         let target = "all";
         let deviceId = null;
 
@@ -103,8 +112,7 @@ module.exports = {
 
         const title = String(data.title || "KNX Homeserver");
         const template = String(data.text || "Neuer Wert: {value}");
-        const body = template.replaceAll(
-            "{value}",
+        const body = template.replace(/\{\{value\}\}|\{value\}/g, () =>
             value == null ? "" : String(value),
         );
         const icon = String(data.icon || "").trim();
