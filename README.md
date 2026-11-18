@@ -6,6 +6,14 @@ laufen unabhängig von Logikdatenblättern. Einstiegspunkt ist eine JavaScript-D
 optionale npm-Abhängigkeiten werden über `package.json` und `package-lock.json`
 mitgeliefert. Ein Beispiel ist [Eufy](eufy/README.md).
 
+[Danfoss Ally](danfoss-ally/README.md) verbindet Thermostate über die Cloud-API
+mit Solltemperatur, Betriebsmodus und Statusrückmeldungen. Das vorhandene
+Ally-Gateway bleibt dabei in Betrieb.
+
+[Netatmo Wetterstation](netatmo/README.md) liest Basisstation, Außen- und
+Innenmodule sowie Regen- und Windsensoren über die Cloud mit automatischer
+OAuth-Token-Erneuerung aus.
+
 ---
 
 ## Dateistruktur
